@@ -1,11 +1,11 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Cell, Row, Table},
-    Frame,
 };
 
-use super::{format_number, sanitize, shorten_path};
+use super::{format_number, format_tokens, sanitize, shorten_path};
 use crate::app::App;
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
@@ -23,7 +23,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
             Row::new(vec![
                 Cell::from(sanitize(&shorten_path(&p.project_path, 40))),
                 Cell::from(format_number(p.commands)),
-                Cell::from(format_number(p.total_saved)).style(Style::default().fg(Color::Green)),
+                Cell::from(format_tokens(p.total_saved)).style(Style::default().fg(Color::Green)),
                 Cell::from(format!("{:.1}%", p.savings_pct))
                     .style(Style::default().fg(Color::Cyan)),
             ])

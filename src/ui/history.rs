@@ -1,11 +1,11 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Cell, Row, Table},
-    Frame,
 };
 
-use super::format_number;
+use super::{format_number, format_tokens};
 use crate::app::{App, HistoryView};
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
@@ -47,9 +47,9 @@ fn render_daily(frame: &mut Frame, app: &App, area: Rect) {
             Row::new(vec![
                 Cell::from(d.date.as_str()),
                 Cell::from(format_number(d.commands)),
-                Cell::from(format_number(d.input_tokens)),
-                Cell::from(format_number(d.output_tokens)),
-                Cell::from(format_number(d.saved_tokens)).style(Style::default().fg(Color::Green)),
+                Cell::from(format_tokens(d.input_tokens)),
+                Cell::from(format_tokens(d.output_tokens)),
+                Cell::from(format_tokens(d.saved_tokens)).style(Style::default().fg(Color::Green)),
                 Cell::from(format!("{:.1}%", d.savings_pct))
                     .style(Style::default().fg(Color::Cyan)),
             ])
@@ -93,7 +93,7 @@ fn render_weekly(frame: &mut Frame, app: &App, area: Rect) {
             Row::new(vec![
                 Cell::from(label),
                 Cell::from(format_number(w.commands)),
-                Cell::from(format_number(w.saved_tokens)).style(Style::default().fg(Color::Green)),
+                Cell::from(format_tokens(w.saved_tokens)).style(Style::default().fg(Color::Green)),
                 Cell::from(format!("{:.1}%", w.savings_pct))
                     .style(Style::default().fg(Color::Cyan)),
             ])
@@ -134,7 +134,7 @@ fn render_monthly(frame: &mut Frame, app: &App, area: Rect) {
             Row::new(vec![
                 Cell::from(m.month.as_str()),
                 Cell::from(format_number(m.commands)),
-                Cell::from(format_number(m.saved_tokens)).style(Style::default().fg(Color::Green)),
+                Cell::from(format_tokens(m.saved_tokens)).style(Style::default().fg(Color::Green)),
                 Cell::from(format!("{:.1}%", m.savings_pct))
                     .style(Style::default().fg(Color::Cyan)),
             ])

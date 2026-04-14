@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -19,6 +19,7 @@ pub struct Summary {
     pub total_saved: i64,
     pub avg_savings_pct: f64,
     pub total_time_ms: i64,
+    pub avg_time_ms: i64,
 }
 
 #[derive(Debug)]
@@ -119,13 +120,28 @@ impl Db {
 
     pub fn get_summary(&self, project: Option<&str>) -> Result<Summary> {
         let parse = |row: &rusqlite::Row| -> rusqlite::Result<Summary> {
+            let total_commands: i64 = row.get(0)?;
+            let total_input: i64 = row.get(1)?;
+            let total_saved: i64 = row.get(3)?;
+            let total_time_ms: i64 = row.get(4)?;
+            let avg_savings_pct = if total_input > 0 {
+                (total_saved as f64 / total_input as f64) * 100.0
+            } else {
+                0.0
+            };
+            let avg_time_ms = if total_commands > 0 {
+                total_time_ms / total_commands
+            } else {
+                0
+            };
             Ok(Summary {
-                total_commands: row.get(0)?,
-                total_input: row.get(1)?,
+                total_commands,
+                total_input,
                 total_output: row.get(2)?,
-                total_saved: row.get(3)?,
-                avg_savings_pct: row.get(4)?,
-                total_time_ms: row.get(5)?,
+                total_saved,
+                avg_savings_pct,
+                total_time_ms,
+                avg_time_ms,
             })
         };
 
@@ -133,7 +149,7 @@ impl Db {
             let glob = format!("{}{}*", glob_escape(p), std::path::MAIN_SEPARATOR);
             self.conn.query_row(
                 "SELECT COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
-                        COALESCE(SUM(saved_tokens),0), COALESCE(AVG(savings_pct),0),
+                        COALESCE(SUM(saved_tokens),0),
                         COALESCE(SUM(exec_time_ms),0)
                  FROM commands WHERE project_path = ?1 OR project_path GLOB ?2",
                 params![p, glob],
@@ -142,7 +158,7 @@ impl Db {
         } else {
             self.conn.query_row(
                 "SELECT COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
-                        COALESCE(SUM(saved_tokens),0), COALESCE(AVG(savings_pct),0),
+                        COALESCE(SUM(saved_tokens),0),
                         COALESCE(SUM(exec_time_ms),0)
                  FROM commands",
                 [],
@@ -154,13 +170,20 @@ impl Db {
 
     pub fn get_daily(&self, project: Option<&str>) -> Result<Vec<DayStats>> {
         let parse = |row: &rusqlite::Row| -> rusqlite::Result<DayStats> {
+            let input: i64 = row.get(2)?;
+            let saved: i64 = row.get(4)?;
+            let savings_pct = if input > 0 {
+                (saved as f64 / input as f64) * 100.0
+            } else {
+                0.0
+            };
             Ok(DayStats {
                 date: row.get(0)?,
                 commands: row.get(1)?,
-                input_tokens: row.get(2)?,
+                input_tokens: input,
                 output_tokens: row.get(3)?,
-                saved_tokens: row.get(4)?,
-                savings_pct: row.get(5)?,
+                saved_tokens: saved,
+                savings_pct,
             })
         };
 
@@ -168,7 +191,7 @@ impl Db {
             let glob = format!("{}{}*", glob_escape(p), std::path::MAIN_SEPARATOR);
             let mut stmt = self.conn.prepare_cached(
                 "SELECT DATE(timestamp) as d, COUNT(*), SUM(input_tokens), SUM(output_tokens),
-                        SUM(saved_tokens), AVG(savings_pct)
+                        SUM(saved_tokens)
                  FROM commands WHERE project_path = ?1 OR project_path GLOB ?2
                  GROUP BY d ORDER BY d DESC LIMIT 90",
             )?;
@@ -177,7 +200,7 @@ impl Db {
         } else {
             let mut stmt = self.conn.prepare_cached(
                 "SELECT DATE(timestamp) as d, COUNT(*), SUM(input_tokens), SUM(output_tokens),
-                        SUM(saved_tokens), AVG(savings_pct)
+                        SUM(saved_tokens)
                  FROM commands GROUP BY d ORDER BY d DESC LIMIT 90",
             )?;
             let rows = stmt.query_map([], parse)?;
@@ -187,12 +210,19 @@ impl Db {
 
     pub fn get_weekly(&self, project: Option<&str>) -> Result<Vec<WeekStats>> {
         let parse = |row: &rusqlite::Row| -> rusqlite::Result<WeekStats> {
+            let input: i64 = row.get(3)?;
+            let saved: i64 = row.get(4)?;
+            let savings_pct = if input > 0 {
+                (saved as f64 / input as f64) * 100.0
+            } else {
+                0.0
+            };
             Ok(WeekStats {
                 week_start: row.get(0)?,
                 week_end: row.get(1)?,
                 commands: row.get(2)?,
-                saved_tokens: row.get(3)?,
-                savings_pct: row.get(4)?,
+                saved_tokens: saved,
+                savings_pct,
             })
         };
 
@@ -201,7 +231,7 @@ impl Db {
             let mut stmt = self.conn.prepare_cached(
                 "SELECT DATE(timestamp, 'weekday 0', '-6 days') as ws,
                         DATE(timestamp, 'weekday 0') as we,
-                        COUNT(*), SUM(saved_tokens), AVG(savings_pct)
+                        COUNT(*), SUM(input_tokens), SUM(saved_tokens)
                  FROM commands WHERE project_path = ?1 OR project_path GLOB ?2
                  GROUP BY ws ORDER BY ws DESC LIMIT 52",
             )?;
@@ -211,7 +241,7 @@ impl Db {
             let mut stmt = self.conn.prepare_cached(
                 "SELECT DATE(timestamp, 'weekday 0', '-6 days') as ws,
                         DATE(timestamp, 'weekday 0') as we,
-                        COUNT(*), SUM(saved_tokens), AVG(savings_pct)
+                        COUNT(*), SUM(input_tokens), SUM(saved_tokens)
                  FROM commands GROUP BY ws ORDER BY ws DESC LIMIT 52",
             )?;
             let rows = stmt.query_map([], parse)?;
@@ -221,11 +251,18 @@ impl Db {
 
     pub fn get_monthly(&self, project: Option<&str>) -> Result<Vec<MonthStats>> {
         let parse = |row: &rusqlite::Row| -> rusqlite::Result<MonthStats> {
+            let input: i64 = row.get(2)?;
+            let saved: i64 = row.get(3)?;
+            let savings_pct = if input > 0 {
+                (saved as f64 / input as f64) * 100.0
+            } else {
+                0.0
+            };
             Ok(MonthStats {
                 month: row.get(0)?,
                 commands: row.get(1)?,
-                saved_tokens: row.get(2)?,
-                savings_pct: row.get(3)?,
+                saved_tokens: saved,
+                savings_pct,
             })
         };
 
@@ -233,7 +270,7 @@ impl Db {
             let glob = format!("{}{}*", glob_escape(p), std::path::MAIN_SEPARATOR);
             let mut stmt = self.conn.prepare_cached(
                 "SELECT STRFTIME('%Y-%m', timestamp) as m, COUNT(*),
-                        SUM(saved_tokens), AVG(savings_pct)
+                        SUM(input_tokens), SUM(saved_tokens)
                  FROM commands WHERE project_path = ?1 OR project_path GLOB ?2
                  GROUP BY m ORDER BY m DESC LIMIT 24",
             )?;
@@ -242,7 +279,7 @@ impl Db {
         } else {
             let mut stmt = self.conn.prepare_cached(
                 "SELECT STRFTIME('%Y-%m', timestamp) as m, COUNT(*),
-                        SUM(saved_tokens), AVG(savings_pct)
+                        SUM(input_tokens), SUM(saved_tokens)
                  FROM commands GROUP BY m ORDER BY m DESC LIMIT 24",
             )?;
             let rows = stmt.query_map([], parse)?;
@@ -268,15 +305,22 @@ impl Db {
 
     pub fn get_top_commands(&self, limit: usize) -> Result<Vec<TopCommand>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT rtk_cmd, COUNT(*) as cnt, SUM(saved_tokens), AVG(savings_pct)
+            "SELECT rtk_cmd, COUNT(*) as cnt, SUM(input_tokens), SUM(saved_tokens)
              FROM commands GROUP BY rtk_cmd ORDER BY SUM(saved_tokens) DESC LIMIT ?1",
         )?;
         let rows = stmt.query_map(params![limit as i64], |row| {
+            let input: i64 = row.get::<_, i64>(2)?;
+            let saved: i64 = row.get::<_, i64>(3)?;
+            let avg_savings_pct = if input > 0 {
+                (saved as f64 / input as f64) * 100.0
+            } else {
+                0.0
+            };
             Ok(TopCommand {
                 command: row.get(0)?,
                 count: row.get(1)?,
-                total_saved: row.get(2)?,
-                avg_savings_pct: row.get(3)?,
+                total_saved: saved,
+                avg_savings_pct,
             })
         })?;
         rows.map(|r| r.map_err(Into::into)).collect()

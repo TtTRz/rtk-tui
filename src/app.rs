@@ -4,7 +4,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use crate::db::{self, Db};
-use crate::event::{spawn_event_threads, AppEvent};
+use crate::event::{AppEvent, spawn_event_threads};
 use crate::ui;
 
 /// Which tab is currently active.

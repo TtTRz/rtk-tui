@@ -4,11 +4,11 @@ pub mod history;
 pub mod projects;
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Tabs},
-    Frame,
 };
 
 use crate::app::{App, Tab};
@@ -86,12 +86,26 @@ pub fn format_number(n: i64) -> String {
         result.push('-');
     }
     for (i, c) in abs.chars().enumerate() {
-        if i > 0 && (abs.len() - i) % 3 == 0 {
+        if i > 0 && (abs.len() - i).is_multiple_of(3) {
             result.push(',');
         }
         result.push(c);
     }
     result
+}
+
+/// Format token counts with K/M suffix (matching RTK's `format_tokens`):
+/// 1_234_567 → "1.2M", 59_234 → "59.2K", 694 → "694"
+pub fn format_tokens(n: i64) -> String {
+    let abs = n.unsigned_abs();
+    let prefix = if n < 0 { "-" } else { "" };
+    if abs >= 1_000_000 {
+        format!("{prefix}{:.1}M", abs as f64 / 1_000_000.0)
+    } else if abs >= 1_000 {
+        format!("{prefix}{:.1}K", abs as f64 / 1_000.0)
+    } else {
+        format!("{prefix}{abs}")
+    }
 }
 
 /// Shorten a file path for display, UTF-8 safe.
@@ -159,5 +173,28 @@ mod tests {
         assert_eq!(sanitize("has\x1b[31mred\x1b[0m"), "has[31mred[0m");
         assert_eq!(sanitize("bell\x07here"), "bellhere");
         assert_eq!(sanitize("tab\there"), "tab\there"); // tabs preserved
+    }
+
+    #[test]
+    fn test_format_tokens_millions() {
+        assert_eq!(format_tokens(1_234_567), "1.2M");
+        assert_eq!(format_tokens(12_345_678), "12.3M");
+    }
+
+    #[test]
+    fn test_format_tokens_thousands() {
+        assert_eq!(format_tokens(59_234), "59.2K");
+        assert_eq!(format_tokens(1_000), "1.0K");
+    }
+
+    #[test]
+    fn test_format_tokens_small() {
+        assert_eq!(format_tokens(694), "694");
+        assert_eq!(format_tokens(0), "0");
+    }
+
+    #[test]
+    fn test_format_tokens_negative() {
+        assert_eq!(format_tokens(-5_000), "-5.0K");
     }
 }

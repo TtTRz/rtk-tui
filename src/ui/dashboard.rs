@@ -1,19 +1,19 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Sparkline},
-    Frame,
 };
 
-use super::{format_number, sanitize};
+use super::{format_number, format_tokens, sanitize};
 use crate::app::App;
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::vertical([
-        Constraint::Length(5), // summary cards
-        Constraint::Length(8), // sparkline
-        Constraint::Min(0),    // recent commands
+        Constraint::Length(11), // summary + efficiency meter
+        Constraint::Length(8),  // sparkline
+        Constraint::Min(0),     // recent commands
     ])
     .split(area);
 
@@ -22,38 +22,115 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     render_recent(frame, app, chunks[2]);
 }
 
-fn make_card<'a>(title: &'a str, value: &'a str, color: Color) -> Paragraph<'a> {
-    Paragraph::new(vec![
-        Line::from(Span::styled(title, Style::default().fg(Color::DarkGray))),
-        Line::from(""),
-        Line::from(Span::styled(
-            value,
+/// Format milliseconds to human-readable duration (matching RTK's format_duration).
+fn format_duration(ms: i64) -> String {
+    let ms = ms.unsigned_abs();
+    if ms < 1000 {
+        format!("{ms}ms")
+    } else if ms < 60_000 {
+        format!("{:.1}s", ms as f64 / 1000.0)
+    } else {
+        let minutes = ms / 60_000;
+        let seconds = (ms % 60_000) / 1000;
+        format!("{minutes}m{seconds}s")
+    }
+}
+
+/// Truncate a command string to `max` characters, appending `…` if truncated.
+fn truncate_cmd(s: &str, max: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= max {
+        s.to_string()
+    } else {
+        let mut t: String = chars[..max.saturating_sub(1)].iter().collect();
+        t.push('…');
+        t
+    }
+}
+
+/// Build efficiency meter bar: ██████████████████░░░░░░ 93.0%
+fn efficiency_meter(pct: f64) -> Line<'static> {
+    let width = 24usize;
+    let ratio = (pct / 100.0).clamp(0.0, 1.0);
+    let filled = ((ratio * width as f64).round() as usize).min(width);
+
+    let color = if pct >= 70.0 {
+        Color::Green
+    } else if pct >= 40.0 {
+        Color::Yellow
+    } else {
+        Color::Red
+    };
+
+    let bar_filled = "█".repeat(filled);
+    let bar_empty = "░".repeat(width - filled);
+    let label = format!(" {pct:.1}%");
+
+    Line::from(vec![
+        Span::styled("Efficiency:       ", Style::default().fg(Color::DarkGray)),
+        Span::styled(bar_filled, Style::default().fg(color)),
+        Span::styled(bar_empty, Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            label,
             Style::default().fg(color).add_modifier(Modifier::BOLD),
-        )),
+        ),
     ])
-    .block(Block::default().borders(Borders::ALL))
 }
 
 fn render_summary(frame: &mut Frame, app: &App, area: Rect) {
-    let summary = &app.cache.summary;
+    let s = &app.cache.summary;
 
-    let cols = Layout::horizontal([
-        Constraint::Percentage(25),
-        Constraint::Percentage(25),
-        Constraint::Percentage(25),
-        Constraint::Percentage(25),
+    let lines = vec![
+        make_kpi_line(
+            "Total commands:   ",
+            &format_number(s.total_commands),
+            Color::White,
+        ),
+        make_kpi_line(
+            "Input tokens:     ",
+            &format_tokens(s.total_input),
+            Color::White,
+        ),
+        make_kpi_line(
+            "Output tokens:    ",
+            &format_tokens(s.total_output),
+            Color::White,
+        ),
+        make_kpi_line(
+            "Tokens saved:     ",
+            &format!(
+                "{} ({:.1}%)",
+                format_tokens(s.total_saved),
+                s.avg_savings_pct
+            ),
+            Color::Green,
+        ),
+        make_kpi_line(
+            "Total exec time:  ",
+            &format!(
+                "{} (avg {})",
+                format_duration(s.total_time_ms),
+                format_duration(s.avg_time_ms)
+            ),
+            Color::Magenta,
+        ),
+        Line::from(""),
+        efficiency_meter(s.avg_savings_pct),
+    ];
+
+    let paragraph =
+        Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(" Summary "));
+    frame.render_widget(paragraph, area);
+}
+
+fn make_kpi_line<'a>(label: &'a str, value: &str, color: Color) -> Line<'a> {
+    Line::from(vec![
+        Span::styled(label, Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            value.to_string(),
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        ),
     ])
-    .split(area);
-
-    let saved = format_number(summary.total_saved);
-    let avg = format!("{:.1}%", summary.avg_savings_pct);
-    let cmds = format_number(summary.total_commands);
-    let time = format!("{:.1}s", summary.total_time_ms as f64 / 1000.0);
-
-    frame.render_widget(make_card("Tokens Saved", &saved, Color::Green), cols[0]);
-    frame.render_widget(make_card("Avg Savings", &avg, Color::Cyan), cols[1]);
-    frame.render_widget(make_card("Commands", &cmds, Color::Yellow), cols[2]);
-    frame.render_widget(make_card("Total Time", &time, Color::Magenta), cols[3]);
 }
 
 fn render_sparkline(frame: &mut Frame, app: &App, area: Rect) {
@@ -75,18 +152,20 @@ fn render_recent(frame: &mut Frame, app: &App, area: Rect) {
         .recent
         .iter()
         .map(|r| {
-            // UTF-8 safe timestamp truncation
             let ts: String = r.timestamp.chars().take(19).collect();
             Line::from(vec![
                 Span::styled(format!("{ts:<20}"), Style::default().fg(Color::DarkGray)),
-                Span::raw(format!(" {:<30}", sanitize(&r.rtk_cmd))),
                 Span::styled(
-                    format!(" {:>+6}", r.saved_tokens),
+                    format!(" {:<30}", truncate_cmd(&sanitize(&r.rtk_cmd), 30)),
+                    Style::default().fg(Color::Cyan),
+                ),
+                Span::styled(
+                    format!("{:>8}", format_tokens(r.saved_tokens)),
                     Style::default().fg(Color::Green),
                 ),
                 Span::styled(
-                    format!(" ({:.0}%)", r.savings_pct),
-                    Style::default().fg(Color::Cyan),
+                    format!("{:>7}", format!("({:.0}%)", r.savings_pct)),
+                    Style::default().fg(Color::DarkGray),
                 ),
             ])
         })
