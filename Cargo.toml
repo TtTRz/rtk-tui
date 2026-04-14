@@ -1,0 +1,28 @@
+[package]
+name = "rtk-tui"
+version = "0.1.0"
+edition = "2021"
+description = "TUI dashboard for RTK token savings analytics"
+license = "MIT"
+repository = "https://github.com/TtTRz/rtk-tui"
+homepage = "https://github.com/TtTRz/rtk-tui"
+readme = "README.md"
+keywords = ["tui", "cli", "rtk", "token", "dashboard"]
+categories = ["command-line-utilities", "development-tools"]
+authors = ["TtTRz"]
+
+[[bin]]
+name = "rtk-tui"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+rusqlite = { version = "0.31", features = ["bundled"] }
+anyhow = "1.0"
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
+dirs = "5"
+
+[dev-dependencies]
+tempfile = "3"
