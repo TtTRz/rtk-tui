@@ -10,7 +10,7 @@ homepage = "https://github.com/TtTRz/rtk-tui"
 readme = "README.md"
 keywords = ["tui", "cli", "rtk", "token", "dashboard"]
 categories = ["command-line-utilities", "development-tools"]
-authors = ["TtTRz"]
+authors = ["TtTRz <romc1224@gmail.com>"]
 
 [[bin]]
 name = "rtk-tui"
