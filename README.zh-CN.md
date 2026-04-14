@@ -19,7 +19,7 @@
 
 [RTK](https://github.com/rtk-ai/rtk) 通过过滤 CLI 输出，为 LLM 节省 60–90% 的 token。
 
-**RTK-TUI** 把这些隐形的工作变成你看得见的仪表盘。
+**RTK-TUI** — RTK token 节省量的实时终端仪表盘。
 
 <br>
 

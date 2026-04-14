@@ -15,7 +15,7 @@
 
 [RTK](https://github.com/rtk-ai/rtk) saves 60–90% of LLM tokens by filtering CLI output.
 
-**RTK-TUI** turns that invisible work into a dashboard you can actually see.
+**RTK-TUI** — Real-time terminal dashboard for RTK token savings.
 
 <br>
 
