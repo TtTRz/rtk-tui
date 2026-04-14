@@ -1,12 +1,12 @@
 <div align="center">
 
-# 🖥️ rtk-tui
+# 🖥️ RTK-TUI
 
 ### Real-time terminal dashboard for your RTK token savings
 
 <br>
 
-[![crates.io](https://img.shields.io/crates/v/rtk-tui.svg?style=flat-square&logo=rust)](https://crates.io/crates/rtk-tui)
+[![crates.io](https://img.shields.io/crates/v/RTK-TUI.svg?style=flat-square&logo=rust)](https://crates.io/crates/RTK-TUI)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Rust 1.92+](https://img.shields.io/badge/rust-1.92%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![RTK](https://img.shields.io/badge/powered%20by-RTK-brightgreen?style=flat-square)](https://github.com/rtk-ai/rtk)
@@ -15,7 +15,7 @@
 
 [RTK](https://github.com/rtk-ai/rtk) saves 60–90% of LLM tokens by filtering CLI output.
 
-**rtk-tui** turns that invisible work into a dashboard you can actually see.
+**RTK-TUI** turns that invisible work into a dashboard you can actually see.
 
 <br>
 
@@ -53,18 +53,18 @@
 ## ⚡ Quick Start
 
 ```bash
-cargo install rtk-tui    # from crates.io
-rtk-tui                  # that's it
+cargo install RTK-TUI    # from crates.io
+RTK-TUI                  # that's it
 ```
 
 <details>
 <summary><b>Build from source</b></summary>
 
 ```bash
-git clone https://github.com/TtTRz/rtk-tui.git
-cd rtk-tui
+git clone https://github.com/TtTRz/RTK-TUI.git
+cd RTK-TUI
 cargo build --release
-# → target/release/rtk-tui
+# → target/release/RTK-TUI
 ```
 
 </details>
@@ -74,9 +74,9 @@ cargo build --release
 ## 📖 Usage
 
 ```bash
-rtk-tui                     # auto-detect RTK database
-rtk-tui --db /path/to.db    # specify database path
-rtk-tui --refresh 5         # refresh every 5s (default: 1s)
+RTK-TUI                     # auto-detect RTK database
+RTK-TUI --db /path/to.db    # specify database path
+RTK-TUI --refresh 5         # refresh every 5s (default: 1s)
 ```
 
 ## ⌨️ Keyboard
@@ -150,11 +150,11 @@ rtk-tui --refresh 5         # refresh every 5s (default: 1s)
 
 ## 📂 Database Location
 
-rtk-tui finds RTK's database automatically:
+RTK-TUI finds RTK's database automatically:
 
 | # | Source | Example |
 |:-:|--------|---------|
-| 1 | `--db` flag | `rtk-tui --db ~/my.db` |
+| 1 | `--db` flag | `RTK-TUI --db ~/my.db` |
 | 2 | `RTK_DB_PATH` env | `export RTK_DB_PATH=~/my.db` |
 | 3 | Platform default | ↓ |
 

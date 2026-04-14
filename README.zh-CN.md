@@ -4,13 +4,13 @@
 
 <br>
 
-# 🖥️ rtk-tui
+# 🖥️ RTK-TUI
 
 ### RTK Token 节省量的实时终端仪表盘
 
 <br>
 
-[![crates.io](https://img.shields.io/crates/v/rtk-tui.svg?style=flat-square&logo=rust)](https://crates.io/crates/rtk-tui)
+[![crates.io](https://img.shields.io/crates/v/RTK-TUI.svg?style=flat-square&logo=rust)](https://crates.io/crates/RTK-TUI)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Rust 1.92+](https://img.shields.io/badge/rust-1.92%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![RTK](https://img.shields.io/badge/powered%20by-RTK-brightgreen?style=flat-square)](https://github.com/rtk-ai/rtk)
@@ -19,7 +19,7 @@
 
 [RTK](https://github.com/rtk-ai/rtk) 通过过滤 CLI 输出，为 LLM 节省 60–90% 的 token。
 
-**rtk-tui** 把这些隐形的工作变成你看得见的仪表盘。
+**RTK-TUI** 把这些隐形的工作变成你看得见的仪表盘。
 
 <br>
 
@@ -53,18 +53,18 @@
 ## ⚡ 快速开始
 
 ```bash
-cargo install rtk-tui    # 从 crates.io 安装
-rtk-tui                  # 搞定
+cargo install RTK-TUI    # 从 crates.io 安装
+RTK-TUI                  # 搞定
 ```
 
 <details>
 <summary><b>从源码编译</b></summary>
 
 ```bash
-git clone https://github.com/TtTRz/rtk-tui.git
-cd rtk-tui
+git clone https://github.com/TtTRz/RTK-TUI.git
+cd RTK-TUI
 cargo build --release
-# → target/release/rtk-tui
+# → target/release/RTK-TUI
 ```
 
 </details>
@@ -74,9 +74,9 @@ cargo build --release
 ## 📖 使用
 
 ```bash
-rtk-tui                     # 自动检测 RTK 数据库
-rtk-tui --db /path/to.db    # 指定数据库路径
-rtk-tui --refresh 5         # 每 5 秒刷新（默认 1 秒）
+RTK-TUI                     # 自动检测 RTK 数据库
+RTK-TUI --db /path/to.db    # 指定数据库路径
+RTK-TUI --refresh 5         # 每 5 秒刷新（默认 1 秒）
 ```
 
 ## ⌨️ 快捷键
@@ -150,11 +150,11 @@ rtk-tui --refresh 5         # 每 5 秒刷新（默认 1 秒）
 
 ## 📂 数据库位置
 
-rtk-tui 自动查找 RTK 的追踪数据库：
+RTK-TUI 自动查找 RTK 的追踪数据库：
 
 | # | 来源 | 示例 |
 |:-:|------|------|
-| 1 | `--db` 参数 | `rtk-tui --db ~/my.db` |
+| 1 | `--db` 参数 | `RTK-TUI --db ~/my.db` |
 | 2 | `RTK_DB_PATH` 环境变量 | `export RTK_DB_PATH=~/my.db` |
 | 3 | 平台默认路径 | ↓ |
 
