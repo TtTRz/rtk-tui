@@ -1,6 +1,7 @@
 mod app;
 mod db;
 mod event;
+mod export;
 mod ui;
 
 use anyhow::{Context, Result};

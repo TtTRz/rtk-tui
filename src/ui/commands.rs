@@ -9,7 +9,14 @@ use super::{format_number, format_tokens, sanitize};
 use crate::app::App;
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
-    let data = &app.cache.top_commands;
+    let query = app.search_query.to_lowercase();
+    let data: Vec<_> = app
+        .cache
+        .top_commands
+        .iter()
+        .filter(|c| query.is_empty() || c.command.to_lowercase().contains(&query))
+        .collect();
+
     let header = Row::new(vec!["Command", "Count", "Total Saved", "Avg Savings %"]).style(
         Style::default()
             .fg(Color::Yellow)
@@ -30,12 +37,17 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
+    let search_hint = if query.is_empty() {
+        String::new()
+    } else {
+        format!(" \"{query}\"")
+    };
     let indicator = if data.is_empty() {
         String::new()
     } else {
         format!(" [{}/{}]", app.scroll_offset + 1, data.len())
     };
-    let title = format!(" Top Commands by Tokens Saved [j/k to scroll]{indicator} ");
+    let title = format!(" Top Commands by Tokens Saved [j/k to scroll]{indicator}{search_hint} ");
 
     let table = Table::new(
         rows,

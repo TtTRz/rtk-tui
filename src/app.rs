@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use crate::db::{self, Db};
 use crate::event::{AppEvent, spawn_event_threads};
+use crate::export;
 use crate::ui;
 
 /// Which tab is currently active.
@@ -52,6 +53,8 @@ pub enum HistoryView {
 #[derive(Default)]
 pub struct DataCache {
     pub summary: db::Summary,
+    pub saved_last_24h: i64,
+    pub sparkline_24h: Vec<u64>,
     pub sparkline: Vec<u64>,
     pub recent: Vec<db::CommandRecord>,
     pub daily: Vec<db::DayStats>,
@@ -69,6 +72,11 @@ pub struct App {
     pub scroll_offset: usize,
     pub last_error: Option<String>,
     pub should_quit: bool,
+    pub show_help: bool,
+    pub search_mode: bool,
+    pub search_query: String,
+    pub export_msg: Option<String>,
+    export_msg_ticks: u8,
     needs_redraw: bool,
     refresh_interval: Duration,
 }
@@ -83,6 +91,11 @@ impl App {
             scroll_offset: 0,
             last_error: None,
             should_quit: false,
+            show_help: false,
+            search_mode: false,
+            search_query: String::new(),
+            export_msg: None,
+            export_msg_ticks: 0,
             needs_redraw: true,
             refresh_interval: Duration::from_secs(refresh_secs),
         };
@@ -120,8 +133,51 @@ impl App {
     fn handle_key(&mut self, code: crossterm::event::KeyCode) {
         use crossterm::event::KeyCode;
 
+        // Help popup: any key dismisses
+        if self.show_help {
+            self.show_help = false;
+            self.needs_redraw = true;
+            return;
+        }
+
+        // Search mode: capture text input
+        if self.search_mode {
+            match code {
+                KeyCode::Esc | KeyCode::Enter => {
+                    self.search_mode = false;
+                    if code == KeyCode::Esc {
+                        self.search_query.clear();
+                    }
+                    self.needs_redraw = true;
+                }
+                KeyCode::Backspace => {
+                    self.search_query.pop();
+                    self.needs_redraw = true;
+                }
+                KeyCode::Char(c) => {
+                    self.search_query.push(c);
+                    self.needs_redraw = true;
+                }
+                _ => {}
+            }
+            return;
+        }
+
         match code {
             KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
+            KeyCode::Char('?') => {
+                self.show_help = true;
+                self.needs_redraw = true;
+            }
+            KeyCode::Char('/') => {
+                self.search_mode = true;
+                self.search_query.clear();
+                self.needs_redraw = true;
+            }
+            KeyCode::Char('e') => {
+                self.handle_export();
+                self.needs_redraw = true;
+            }
             KeyCode::Tab => {
                 self.tab = self.tab.next();
                 self.scroll_offset = 0;
@@ -176,6 +232,13 @@ impl App {
 
     fn on_tick(&mut self) {
         self.refresh_cache();
+        // Decay export message after a few ticks
+        if self.export_msg_ticks > 0 {
+            self.export_msg_ticks -= 1;
+            if self.export_msg_ticks == 0 {
+                self.export_msg = None;
+            }
+        }
         self.needs_redraw = true;
     }
 
@@ -192,6 +255,18 @@ impl App {
             Tab::Projects => self.cache.projects.len(),
         };
         len.saturating_sub(1)
+    }
+
+    fn handle_export(&mut self) {
+        match export::export_csv(self) {
+            Ok(path) => {
+                self.export_msg = Some(format!("Exported to {}", path.display()));
+                self.export_msg_ticks = 3; // show for ~3 ticks
+            }
+            Err(e) => {
+                self.last_error = Some(format!("Export failed: {e}"));
+            }
+        }
     }
 
     /// Refresh all cached data from DB, tracking errors.
@@ -211,6 +286,8 @@ impl App {
 
         self.cache = DataCache {
             summary: fetch!(self.db.get_summary(None)),
+            saved_last_24h: fetch!(self.db.get_saved_last_24h()),
+            sparkline_24h: fetch!(self.db.get_hourly_sparkline(24)),
             sparkline: fetch!(self.db.get_daily_sparkline(30)),
             recent: fetch!(self.db.get_recent(10)),
             daily: fetch!(self.db.get_daily(None)),

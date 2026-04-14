@@ -343,14 +343,53 @@ impl Db {
         rows.map(|r| r.map_err(Into::into)).collect()
     }
 
+    /// Get total tokens saved in the last 24 hours.
+    pub fn get_saved_last_24h(&self) -> Result<i64> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT COALESCE(SUM(saved_tokens), 0) FROM commands WHERE timestamp >= datetime('now', '-24 hours')",
+        )?;
+        let saved: i64 = stmt.query_row([], |row| row.get(0))?;
+        Ok(saved)
+    }
+
+    /// Get hourly savings for the last N hours (for sparkline).
+    /// Returns one value per hour, filling zeros for hours with no data.
+    pub fn get_hourly_sparkline(&self, hours: usize) -> Result<Vec<u64>> {
+        let offset = format!("-{} hours", hours.saturating_sub(1));
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT STRFTIME('%Y-%m-%d %H', timestamp, 'localtime') as h, COALESCE(SUM(saved_tokens), 0)
+             FROM commands
+             WHERE timestamp >= datetime('now', ?1)
+             GROUP BY h ORDER BY h ASC",
+        )?;
+
+        let map: HashMap<String, i64> = stmt
+            .query_map(params![offset], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let now = chrono::Local::now();
+        let values: Vec<u64> = (0..hours)
+            .map(|i| {
+                let hour = now - chrono::Duration::hours((hours - 1 - i) as i64);
+                let key = hour.format("%Y-%m-%d %H").to_string();
+                map.get(&key).copied().unwrap_or(0).max(0) as u64
+            })
+            .collect();
+
+        Ok(values)
+    }
+
     /// Get daily savings for the last N days (for sparkline).
     /// Single query with GROUP BY, filling in zeros for missing days.
     pub fn get_daily_sparkline(&self, days: usize) -> Result<Vec<u64>> {
         let offset = format!("-{} days", days.saturating_sub(1));
         let mut stmt = self.conn.prepare_cached(
-            "SELECT DATE(timestamp) as d, COALESCE(SUM(saved_tokens), 0)
+            "SELECT DATE(timestamp, 'localtime') as d, COALESCE(SUM(saved_tokens), 0)
              FROM commands
-             WHERE DATE(timestamp) >= DATE('now', ?1)
+             WHERE DATE(timestamp, 'localtime') >= DATE('now', 'localtime', ?1)
              GROUP BY d ORDER BY d ASC",
         )?;
 
@@ -500,5 +539,81 @@ mod tests {
     fn test_db_not_found() {
         let result = Db::open(Some("/nonexistent/path/db.sqlite"));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_saved_last_24h() {
+        let (_dir, db) = create_test_db();
+        // Test data has timestamps in the past (2026-04-13/14), so result depends on "now".
+        // At minimum, the query should succeed and return a non-negative value.
+        let saved = db.get_saved_last_24h().unwrap();
+        assert!(saved >= 0);
+    }
+
+    #[test]
+    fn test_saved_last_24h_with_recent_data() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let db_path = dir.path().join("test.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE commands (
+                id INTEGER PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                original_cmd TEXT NOT NULL,
+                rtk_cmd TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                saved_tokens INTEGER NOT NULL,
+                savings_pct REAL NOT NULL,
+                exec_time_ms INTEGER DEFAULT 0,
+                project_path TEXT DEFAULT ''
+            );",
+        )
+        .unwrap();
+        // Insert a row with timestamp = now
+        conn.execute(
+            "INSERT INTO commands VALUES (1, datetime('now'), 'git status', 'rtk git status', 1000, 200, 800, 80.0, 5, '')",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let db = Db::open(Some(db_path.to_str().unwrap())).unwrap();
+        let saved = db.get_saved_last_24h().unwrap();
+        assert_eq!(saved, 800);
+    }
+
+    #[test]
+    fn test_hourly_sparkline_length() {
+        let (_dir, db) = create_test_db();
+        let sparkline = db.get_hourly_sparkline(24).unwrap();
+        assert_eq!(sparkline.len(), 24);
+    }
+
+    #[test]
+    fn test_hourly_sparkline_fills_zeros() {
+        let (_dir, db) = create_test_db();
+        let sparkline = db.get_hourly_sparkline(24).unwrap();
+        // Most hours should be 0 (test data has at most a few hours of data)
+        let zero_count = sparkline.iter().filter(|&&v| v == 0).count();
+        assert!(
+            zero_count >= 20,
+            "Expected at least 20 zero hours, got {zero_count}"
+        );
+    }
+
+    #[test]
+    fn test_summary_weighted_savings() {
+        let (_dir, db) = create_test_db();
+        let s = db.get_summary(None).unwrap();
+        // total_input = 1000 + 5000 + 2000 = 8000
+        // total_saved = 800 + 4500 + 1600 = 6900
+        // weighted pct = 6900/8000 * 100 = 86.25
+        let expected = 6900.0 / 8000.0 * 100.0;
+        assert!(
+            (s.avg_savings_pct - expected).abs() < 0.1,
+            "Expected {expected:.1}%, got {:.1}%",
+            s.avg_savings_pct
+        );
     }
 }

@@ -9,7 +9,14 @@ use super::{format_number, format_tokens, sanitize, shorten_path};
 use crate::app::App;
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
-    let data = &app.cache.projects;
+    let query = app.search_query.to_lowercase();
+    let data: Vec<_> = app
+        .cache
+        .projects
+        .iter()
+        .filter(|p| query.is_empty() || p.project_path.to_lowercase().contains(&query))
+        .collect();
+
     let header = Row::new(vec!["Project", "Commands", "Saved", "Savings %"]).style(
         Style::default()
             .fg(Color::Yellow)
@@ -30,12 +37,17 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
+    let search_hint = if query.is_empty() {
+        String::new()
+    } else {
+        format!(" \"{query}\"")
+    };
     let indicator = if data.is_empty() {
         String::new()
     } else {
         format!(" [{}/{}]", app.scroll_offset + 1, data.len())
     };
-    let title = format!(" Projects [j/k to scroll]{indicator} ");
+    let title = format!(" Projects [j/k to scroll]{indicator}{search_hint} ");
 
     let table = Table::new(
         rows,

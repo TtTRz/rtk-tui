@@ -5,10 +5,10 @@ pub mod projects;
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Rect},
+    layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Tabs},
+    widgets::{Block, Borders, Clear, Paragraph, Tabs},
 };
 
 use crate::app::{App, Tab};
@@ -20,31 +20,162 @@ pub fn sanitize(s: &str) -> String {
 }
 
 pub fn render(frame: &mut Frame, app: &App) {
-    let has_error = app.last_error.is_some();
+    let has_status = app.last_error.is_some() || app.export_msg.is_some() || app.search_mode;
     let chunks = Layout::vertical([
-        Constraint::Length(3),                             // tab bar
-        Constraint::Min(0),                                // content
-        Constraint::Length(if has_error { 1 } else { 0 }), // status bar
+        Constraint::Length(3),                              // tab bar
+        Constraint::Min(0),                                 // content
+        Constraint::Length(if has_status { 1 } else { 0 }), // status bar
     ])
     .split(frame.area());
 
     render_tabs(frame, app, chunks[0]);
 
-    match app.tab {
-        Tab::Dashboard => dashboard::render(frame, app, chunks[1]),
-        Tab::History => history::render(frame, app, chunks[1]),
-        Tab::Commands => commands::render(frame, app, chunks[1]),
-        Tab::Projects => projects::render(frame, app, chunks[1]),
+    // Empty state: no data at all
+    if app.cache.summary.total_commands == 0 {
+        render_empty_state(frame, chunks[1]);
+    } else {
+        match app.tab {
+            Tab::Dashboard => dashboard::render(frame, app, chunks[1]),
+            Tab::History => history::render(frame, app, chunks[1]),
+            Tab::Commands => commands::render(frame, app, chunks[1]),
+            Tab::Projects => projects::render(frame, app, chunks[1]),
+        }
     }
 
+    // Status bar (priority: error > search > export)
     if let Some(err) = &app.last_error {
-        let msg = format!(" DB error: {} ", err);
+        let msg = format!(" Error: {} ", err);
         let paragraph = Paragraph::new(Line::from(Span::styled(
             msg,
             Style::default().fg(Color::White).bg(Color::Red),
         )));
         frame.render_widget(paragraph, chunks[2]);
+    } else if app.search_mode {
+        let msg = format!(" / {}█ ", app.search_query);
+        let paragraph = Paragraph::new(Line::from(Span::styled(
+            msg,
+            Style::default().fg(Color::White).bg(Color::Blue),
+        )));
+        frame.render_widget(paragraph, chunks[2]);
+    } else if let Some(msg) = &app.export_msg {
+        let paragraph = Paragraph::new(Line::from(Span::styled(
+            format!(" {msg} "),
+            Style::default().fg(Color::White).bg(Color::Green),
+        )));
+        frame.render_widget(paragraph, chunks[2]);
     }
+
+    // Help popup overlay (rendered last, on top of everything)
+    if app.show_help {
+        render_help_popup(frame);
+    }
+}
+
+fn render_empty_state(frame: &mut Frame, area: Rect) {
+    let text = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "No RTK data found.",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Run some commands with RTK to start tracking:",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  cargo install rtk",
+            Style::default().fg(Color::Cyan),
+        )),
+        Line::from(Span::styled(
+            "  rtk git status",
+            Style::default().fg(Color::Cyan),
+        )),
+    ];
+    let paragraph = Paragraph::new(text)
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
+    frame.render_widget(paragraph, area);
+}
+
+fn render_help_popup(frame: &mut Frame) {
+    let help_text = vec![
+        Line::from(Span::styled(
+            "Keyboard Shortcuts",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  1 2 3 4  ", Style::default().fg(Color::Cyan)),
+            Span::raw("Switch tabs"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Tab      ", Style::default().fg(Color::Cyan)),
+            Span::raw("Next tab"),
+        ]),
+        Line::from(vec![
+            Span::styled("  j / ↓    ", Style::default().fg(Color::Cyan)),
+            Span::raw("Scroll down"),
+        ]),
+        Line::from(vec![
+            Span::styled("  k / ↑    ", Style::default().fg(Color::Cyan)),
+            Span::raw("Scroll up"),
+        ]),
+        Line::from(vec![
+            Span::styled("  d w m    ", Style::default().fg(Color::Cyan)),
+            Span::raw("Daily / Weekly / Monthly (History tab)"),
+        ]),
+        Line::from(vec![
+            Span::styled("  /        ", Style::default().fg(Color::Cyan)),
+            Span::raw("Search (Commands / Projects)"),
+        ]),
+        Line::from(vec![
+            Span::styled("  e        ", Style::default().fg(Color::Cyan)),
+            Span::raw("Export current tab as CSV"),
+        ]),
+        Line::from(vec![
+            Span::styled("  r        ", Style::default().fg(Color::Cyan)),
+            Span::raw("Force refresh"),
+        ]),
+        Line::from(vec![
+            Span::styled("  q / Esc  ", Style::default().fg(Color::Cyan)),
+            Span::raw("Quit"),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Press any key to close",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+
+    let popup_width = 48;
+    let popup_height = help_text.len() as u16 + 2; // +2 for border
+    let area = frame.area();
+    let popup_area = centered_rect(popup_width, popup_height, area);
+
+    frame.render_widget(Clear, popup_area);
+    let paragraph = Paragraph::new(help_text).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Help (?) ")
+            .border_style(Style::default().fg(Color::Yellow)),
+    );
+    frame.render_widget(paragraph, popup_area);
+}
+
+/// Create a centered rectangle within `area`.
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let vertical = Layout::vertical([Constraint::Length(height)])
+        .flex(Flex::Center)
+        .split(area);
+    Layout::horizontal([Constraint::Length(width)])
+        .flex(Flex::Center)
+        .split(vertical[0])[0]
 }
 
 fn render_tabs(frame: &mut Frame, app: &App, area: Rect) {
