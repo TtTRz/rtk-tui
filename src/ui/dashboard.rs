@@ -3,25 +3,51 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Sparkline},
+    widgets::{Block, Borders, Paragraph},
 };
 
 use super::{format_number, format_tokens, sanitize};
 use crate::app::App;
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::vertical([
-        Constraint::Length(11), // summary + efficiency meter
-        Constraint::Length(7),  // last 24h sparkline + axis
-        Constraint::Length(7),  // last 30 days sparkline + axis
-        Constraint::Min(0),     // recent commands
-    ])
-    .split(area);
-
-    render_summary(frame, app, chunks[0]);
-    render_last_24h(frame, app, chunks[1]);
-    render_sparkline(frame, app, chunks[2]);
-    render_recent(frame, app, chunks[3]);
+    let h = area.height;
+    // Adaptive layout based on terminal height
+    if h >= 30 {
+        // Tall terminal: show all sections
+        let chunks = Layout::vertical([
+            Constraint::Length(13), // summary + buddy
+            Constraint::Length(8),  // last 24h bar chart + axis
+            Constraint::Length(8),  // last 30 days bar chart + axis
+            Constraint::Min(0),     // recent commands
+        ])
+        .split(area);
+        render_summary(frame, app, chunks[0]);
+        render_last_24h(frame, app, chunks[1]);
+        render_sparkline(frame, app, chunks[2]);
+        render_recent(frame, app, chunks[3]);
+    } else if h >= 20 {
+        // Medium terminal: smaller sparklines
+        let chunks = Layout::vertical([
+            Constraint::Length(11), // summary + buddy
+            Constraint::Length(6),  // last 24h bar chart
+            Constraint::Length(6),  // last 30 days bar chart
+            Constraint::Min(0),     // recent commands
+        ])
+        .split(area);
+        render_summary(frame, app, chunks[0]);
+        render_last_24h(frame, app, chunks[1]);
+        render_sparkline(frame, app, chunks[2]);
+        render_recent(frame, app, chunks[3]);
+    } else {
+        // Short terminal: skip sparklines
+        let chunks = Layout::vertical([
+            Constraint::Length(11), // summary + buddy
+            Constraint::Min(0),     // recent commands
+        ])
+        .split(area);
+        render_summary(frame, app, chunks[0]);
+        render_recent(frame, app, chunks[1]);
+    }
 }
 
 /// Format milliseconds to human-readable duration (matching RTK's format_duration).
@@ -80,6 +106,30 @@ fn efficiency_meter(pct: f64) -> Line<'static> {
 }
 
 fn render_summary(frame: &mut Frame, app: &App, area: Rect) {
+    // Only show buddy if terminal is wide enough (>= 75 cols)
+    if area.width >= 75 {
+        let cols = Layout::horizontal([
+            Constraint::Percentage(60), // KPI
+            Constraint::Percentage(40), // Buddy
+        ])
+        .split(area);
+
+        render_kpi(frame, app, cols[0]);
+        crate::buddy::render_buddy(frame, app, cols[1]);
+    } else {
+        render_kpi(frame, app, area);
+    }
+}
+
+/// Update buddy's max_x based on actual panel width. Called from App on tick.
+pub fn update_buddy_max_x(app: &mut crate::app::App, area_width: u16) {
+    if area_width >= 75 {
+        let buddy_w = (area_width as usize * 40 / 100).saturating_sub(2); // 40% minus border
+        app.buddy.set_max_x(buddy_w);
+    }
+}
+
+fn render_kpi(frame: &mut Frame, app: &App, area: Rect) {
     let s = &app.cache.summary;
 
     let lines = vec![
@@ -135,8 +185,81 @@ fn make_kpi_line<'a>(label: &'a str, value: &str, color: Color) -> Line<'a> {
     ])
 }
 
+/// Bar characters for 8 height levels (index 0 = lowest, 7 = tallest).
+const BAR_CHARS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+
+/// Map a data value to a color based on its percentile of the max.
+/// Peak → muted red, High → muted amber, Medium → base_color, Low → DarkGray
+fn value_to_color(val: u64, max_val: u64, base_color: Color) -> Color {
+    if val == 0 || max_val == 0 {
+        return Color::DarkGray;
+    }
+    let ratio = val as f64 / max_val as f64;
+    if ratio >= 0.9 {
+        Color::Rgb(200, 100, 100) // muted red
+    } else if ratio >= 0.6 {
+        Color::Rgb(200, 170, 80) // muted amber
+    } else if ratio >= 0.2 {
+        base_color
+    } else {
+        Color::DarkGray
+    }
+}
+
+/// Build multi-line colored bar chart. Bars grow upward from bottom (adjacent to axis).
+/// `content_height` = number of text lines for bars.
+/// Total resolution = content_height * 8 levels.
+fn build_bar_lines(data: &[u64], base_color: Color, content_height: usize) -> Vec<Line<'static>> {
+    let max_val = data.iter().copied().max().unwrap_or(0);
+    let total_levels = content_height * 8;
+
+    // For each data point, compute its level (0..total_levels)
+    let levels: Vec<usize> = data
+        .iter()
+        .map(|&v| {
+            if v == 0 || max_val == 0 {
+                0
+            } else {
+                // Non-zero gets at least level 1
+                let l = ((v as f64 / max_val as f64) * total_levels as f64).round() as usize;
+                l.clamp(1, total_levels)
+            }
+        })
+        .collect();
+
+    // Render top-to-bottom: row 0 = top, row (content_height-1) = bottom (touching axis)
+    (0..content_height)
+        .map(|row| {
+            // This row covers levels: base_level..base_level+8
+            // row 0 (top) = highest levels, row (content_height-1) (bottom) = levels 0..8
+            let base_level = (content_height - 1 - row) * 8;
+            let spans: Vec<Span<'static>> = levels
+                .iter()
+                .zip(data.iter())
+                .map(|(&level, &val)| {
+                    let color = value_to_color(val, max_val, base_color);
+                    if level <= base_level {
+                        // Bar doesn't reach this row
+                        Span::styled(" ".to_string(), Style::default())
+                    } else if level >= base_level + 8 {
+                        // Bar fills this row completely
+                        Span::styled("█".to_string(), Style::default().fg(color))
+                    } else {
+                        // Partial fill
+                        let sub = level - base_level; // 1..7
+                        Span::styled(
+                            BAR_CHARS[sub.min(7)].to_string(),
+                            Style::default().fg(color),
+                        )
+                    }
+                })
+                .collect();
+            Line::from(spans)
+        })
+        .collect()
+}
+
 /// Stretch data points to fill the target width using nearest-neighbor sampling.
-/// Sparkline renders 1 bar per data point, so we need data.len() == display width.
 fn stretch_data(data: &[u64], target_width: usize) -> Vec<u64> {
     if data.is_empty() || target_width == 0 {
         return vec![0; target_width];
@@ -157,25 +280,25 @@ fn render_last_24h(frame: &mut Frame, app: &App, area: Rect) {
     );
 
     let inner = Layout::vertical([
-        Constraint::Min(1),    // sparkline with top+left+right border
-        Constraint::Length(1), // axis labels (no border, just text)
+        Constraint::Length(6), // top border + 5 bar lines
+        Constraint::Length(1), // axis labels
         Constraint::Length(1), // bottom border line
     ])
     .split(area);
 
-    // Sparkline inner width = area width - 2 (left+right border)
+    // Inner width = area width - 2 (left+right border)
     let spark_width = inner[0].width.saturating_sub(2) as usize;
     let stretched = stretch_data(&app.cache.sparkline_24h, spark_width);
+    // content_height = area height - 1 (top border)
+    let content_h = inner[0].height.saturating_sub(1) as usize;
+    let bar_lines = build_bar_lines(&stretched, Color::Cyan, content_h);
 
-    let sparkline = Sparkline::default()
-        .block(
-            Block::default()
-                .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
-                .title(title),
-        )
-        .data(&stretched)
-        .style(Style::default().fg(Color::Cyan));
-    frame.render_widget(sparkline, inner[0]);
+    let paragraph = Paragraph::new(bar_lines).block(
+        Block::default()
+            .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
+            .title(title),
+    );
+    frame.render_widget(paragraph, inner[0]);
 
     // Axis labels: plain text padded to align inside the border columns
     let axis = build_hour_axis(inner[1].width as usize);
@@ -187,25 +310,33 @@ fn render_last_24h(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(bottom, inner[2]);
 }
 
-/// Build hour axis label line: "-24h    -18h    -12h    -6h     now"
+/// Build hour axis label line with actual clock times: "17:00  20:00  23:00  02:00  05:00"
 fn build_hour_axis(width: usize) -> Line<'static> {
     let inner_w = width.saturating_sub(2);
     if inner_w < 10 {
         return Line::from("");
     }
-    let labels: Vec<String> = vec![
-        "-24h".to_string(),
-        "-18h".to_string(),
-        "-12h".to_string(),
-        "-6h".to_string(),
-        "now".to_string(),
-    ];
+    let now = chrono::Local::now();
+    // Adaptive label count based on width: every 2h if wide enough, else every 3h
+    let step = if inner_w >= 60 { 2 } else { 3 };
+    let count = 24 / step + 1;
+    let labels: Vec<String> = (0..count)
+        .map(|i| {
+            let hours_ago = 24 - i * step;
+            if hours_ago == 0 {
+                "now".to_string()
+            } else {
+                let t = now - chrono::Duration::hours(hours_ago as i64);
+                t.format("%H:%M").to_string()
+            }
+        })
+        .collect();
     wrap_axis_in_border(&labels, inner_w)
 }
 
 fn render_sparkline(frame: &mut Frame, app: &App, area: Rect) {
     let inner = Layout::vertical([
-        Constraint::Min(1),    // sparkline with top+left+right border
+        Constraint::Length(6), // top border + 5 bar lines
         Constraint::Length(1), // axis labels
         Constraint::Length(1), // bottom border line
     ])
@@ -213,16 +344,15 @@ fn render_sparkline(frame: &mut Frame, app: &App, area: Rect) {
 
     let spark_width = inner[0].width.saturating_sub(2) as usize;
     let stretched = stretch_data(&app.cache.sparkline, spark_width);
+    let content_h = inner[0].height.saturating_sub(1) as usize;
+    let bar_lines = build_bar_lines(&stretched, Color::Green, content_h);
 
-    let sparkline = Sparkline::default()
-        .block(
-            Block::default()
-                .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
-                .title(" Last 30 Days — Tokens Saved "),
-        )
-        .data(&stretched)
-        .style(Style::default().fg(Color::Green));
-    frame.render_widget(sparkline, inner[0]);
+    let paragraph = Paragraph::new(bar_lines).block(
+        Block::default()
+            .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
+            .title(" Last 30 Days — Tokens Saved "),
+    );
+    frame.render_widget(paragraph, inner[0]);
 
     let axis = build_day_axis(inner[1].width as usize);
     let paragraph = Paragraph::new(axis);
@@ -239,18 +369,24 @@ fn build_day_axis(width: usize) -> Line<'static> {
         return Line::from("");
     }
     let today = chrono::Local::now().date_naive();
-    let offsets = [29, 22, 14, 7, 0];
-    let labels: Vec<String> = offsets
-        .iter()
-        .map(|&days_ago| {
-            let d = today - chrono::Duration::days(days_ago);
-            d.format("%m/%d").to_string()
+    // Adaptive label count: every 3 days if wide, else every 5 days
+    let step = if inner_w >= 60 { 3 } else { 5 };
+    let count = 30 / step + 1;
+    let labels: Vec<String> = (0..count)
+        .map(|i| {
+            let days_ago = 30 - i * step;
+            if days_ago == 0 {
+                "now".to_string()
+            } else {
+                let d = today - chrono::Duration::days(days_ago as i64);
+                d.format("%m/%d").to_string()
+            }
         })
         .collect();
     wrap_axis_in_border(&labels, inner_w)
 }
 
-/// Render axis labels between "│" border chars: "│ label1    label2    label3 │"
+/// Render axis labels between "│" border chars, with all labels padded to uniform width.
 fn wrap_axis_in_border(labels: &[String], inner_w: usize) -> Line<'static> {
     if labels.is_empty() || inner_w == 0 {
         return Line::from("");
@@ -258,9 +394,16 @@ fn wrap_axis_in_border(labels: &[String], inner_w: usize) -> Line<'static> {
     let style = Style::default().fg(Color::DarkGray);
     let border_style = Style::default().fg(Color::White);
 
-    let total_label_len: usize = labels.iter().map(|l| l.len()).sum();
+    // Pad all labels to the same width (center-aligned)
+    let max_label_len = labels.iter().map(|l| l.len()).max().unwrap_or(0);
+    let padded: Vec<String> = labels
+        .iter()
+        .map(|l| format!("{:^width$}", l, width = max_label_len))
+        .collect();
+
+    let total_label_len: usize = padded.iter().map(|l| l.len()).sum();
     if total_label_len >= inner_w {
-        let text: String = labels.join(" ");
+        let text: String = padded.join(" ");
         return Line::from(vec![
             Span::styled("│", border_style),
             Span::styled(text, style),
@@ -268,13 +411,13 @@ fn wrap_axis_in_border(labels: &[String], inner_w: usize) -> Line<'static> {
         ]);
     }
 
-    let n = labels.len();
+    let n = padded.len();
     let total_gap = inner_w - total_label_len;
     let gap_count = if n > 1 { n - 1 } else { 1 };
 
     let mut spans: Vec<Span<'static>> = Vec::new();
     spans.push(Span::styled("│", border_style));
-    for (i, label) in labels.iter().enumerate() {
+    for (i, label) in padded.iter().enumerate() {
         spans.push(Span::styled(label.clone(), style));
         if i < n - 1 {
             let gap = total_gap * (i + 1) / gap_count - total_gap * i / gap_count;
@@ -372,5 +515,72 @@ mod tests {
     #[test]
     fn test_format_duration_negative() {
         assert_eq!(format_duration(-1500), "1.5s");
+    }
+}
+
+#[cfg(test)]
+mod render_tests {
+    use crate::app::App;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    fn make_test_app() -> App {
+        // Create a minimal app with fake data (no DB needed for rendering)
+        let dir = tempfile::TempDir::new().unwrap();
+        let db_path = dir.path().join("test.db");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE commands (
+                id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL,
+                original_cmd TEXT NOT NULL, rtk_cmd TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
+                saved_tokens INTEGER NOT NULL, savings_pct REAL NOT NULL,
+                exec_time_ms INTEGER DEFAULT 0, project_path TEXT DEFAULT ''
+            );
+            INSERT INTO commands VALUES (1, datetime('now'), 'git status', 'rtk git status', 1000, 200, 800, 80.0, 5, '');",
+        ).unwrap();
+        drop(conn);
+        let db = crate::db::Db::open(Some(db_path.to_str().unwrap())).unwrap();
+        App::new(db, 1, db_path.to_str().unwrap(), None)
+    }
+
+    #[test]
+    fn test_buddy_renders_in_dashboard() {
+        let app = make_test_app();
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                crate::ui::render(frame, &app);
+            })
+            .unwrap();
+
+        let buf = terminal.backend().buffer().clone();
+        // Search for buddy-related content in the buffer
+        let content: String = (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // Dump full buffer to file for debugging
+        let mut dump = String::new();
+        dump.push_str("=== FULL RENDER OUTPUT (80x24) ===\n");
+        for y in 0..buf.area.height {
+            let line: String = (0..buf.area.width)
+                .map(|x| buf[(x, y)].symbol().to_string())
+                .collect();
+            dump.push_str(&format!("{:2}: {}\n", y, line));
+        }
+        dump.push_str("=== END ===\n");
+        std::fs::write("/tmp/rtk-tui-render-dump.txt", &dump).unwrap();
+
+        assert!(
+            content.contains("Buddy"),
+            "Buddy block title not found in render output"
+        );
     }
 }

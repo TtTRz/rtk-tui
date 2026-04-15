@@ -1,8 +1,9 @@
 use anyhow::Result;
-use ratatui::{DefaultTerminal, Frame};
+use ratatui::DefaultTerminal;
 use std::sync::mpsc;
 use std::time::Duration;
 
+use crate::buddy::BuddyState;
 use crate::db::{self, Db};
 use crate::event::{AppEvent, spawn_event_threads};
 use crate::export;
@@ -67,6 +68,7 @@ pub struct DataCache {
 pub struct App {
     pub db: Db,
     pub cache: DataCache,
+    pub buddy: BuddyState,
     pub tab: Tab,
     pub history_view: HistoryView,
     pub scroll_offset: usize,
@@ -78,14 +80,18 @@ pub struct App {
     pub export_msg: Option<String>,
     export_msg_ticks: u8,
     needs_redraw: bool,
-    refresh_interval: Duration,
+    refresh_interval_ticks: usize, // data refresh every N ticks
+    tick_count: usize,
 }
 
 impl App {
-    pub fn new(db: Db, refresh_secs: u64) -> Self {
+    pub fn new(db: Db, refresh_secs: u64, db_path: &str, buddy_species: Option<&str>) -> Self {
+        // Animation tick is 500ms, data refresh every refresh_secs
+        let refresh_interval_ticks = (refresh_secs * 2).max(1) as usize;
         let mut app = Self {
             db,
             cache: DataCache::default(),
+            buddy: BuddyState::new(db_path, buddy_species),
             tab: Tab::Dashboard,
             history_view: HistoryView::Daily,
             scroll_offset: 0,
@@ -97,7 +103,8 @@ impl App {
             export_msg: None,
             export_msg_ticks: 0,
             needs_redraw: true,
-            refresh_interval: Duration::from_secs(refresh_secs),
+            refresh_interval_ticks,
+            tick_count: 0,
         };
         app.refresh_cache();
         app
@@ -105,11 +112,15 @@ impl App {
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         let (tx, rx) = mpsc::channel();
-        spawn_event_threads(tx, self.refresh_interval);
+        // Animation tick at 500ms (matching Claude Code)
+        spawn_event_threads(tx, Duration::from_millis(500));
 
         loop {
             if self.needs_redraw {
-                terminal.draw(|frame| self.draw(frame))?;
+                // Update buddy bounds before drawing
+                let term_width = terminal.size()?.width;
+                ui::dashboard::update_buddy_max_x(self, term_width);
+                terminal.draw(|frame| ui::render(frame, self))?;
                 self.needs_redraw = false;
             }
 
@@ -124,10 +135,6 @@ impl App {
                 return Ok(());
             }
         }
-    }
-
-    fn draw(&self, frame: &mut Frame) {
-        ui::render(frame, self);
     }
 
     fn handle_key(&mut self, code: crossterm::event::KeyCode) {
@@ -231,9 +238,19 @@ impl App {
     }
 
     fn on_tick(&mut self) {
-        self.refresh_cache();
-        // Decay export message after a few ticks
-        if self.export_msg_ticks > 0 {
+        self.tick_count += 1;
+
+        // Refresh data from DB at the user-configured interval
+        if self.tick_count.is_multiple_of(self.refresh_interval_ticks) {
+            self.refresh_cache();
+        }
+
+        // Buddy animation runs every tick (500ms)
+        self.buddy.tick(&self.cache);
+
+        // Decay export message (counts in data-refresh ticks)
+        if self.tick_count.is_multiple_of(self.refresh_interval_ticks) && self.export_msg_ticks > 0
+        {
             self.export_msg_ticks -= 1;
             if self.export_msg_ticks == 0 {
                 self.export_msg = None;

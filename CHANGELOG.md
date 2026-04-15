@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-04-15
+
+### Added
+- **Buddy companion** — ASCII pet on the Dashboard, inspired by Claude Code's buddy system
+  - 7 species: Llama, Cat, Duck, Blob, Robot, Penguin, Ghost
+  - Deterministic species from DB path hash (FNV-1a), or choose with `--buddy <name>`
+  - 5 moods (Ecstatic/Happy/Content/Sleepy/Worried) driven by token savings data
+  - Action state machine: Idle, WalkLeft, WalkRight, Bounce
+  - Speech bubbles with mood-specific messages (30 total, 6 per mood)
+  - Mood-colored sprites with eye expressions (✦/·/°/-/×)
+  - Responsive: only shown when terminal ≥ 75 columns wide
+- `--buddy` CLI flag to select species at startup
+- 13 new buddy tests (species, mood, animation, bubble, walk, bounce)
+
+### Changed
+- Sprite frames expanded to 6 lines for consistent rendering across all species
+- Dashboard layout: Summary splits 60/40 for KPI + Buddy panel
+
+### Fixed
+- Bounce animation no longer hides Llama ears (remove bubble line instead of sprite line)
+
 ## [0.2.0] - 2026-04-14
 
 ### Added

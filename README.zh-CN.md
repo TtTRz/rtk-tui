@@ -30,28 +30,27 @@
 ```
 ┌ RTK Token Savings ──────────────────────────────────────────────────────────┐
 │  1 Dashboard    2 History    3 Commands    4 Projects                        │
-├ Summary ────────────────────────────────────────────────────────────────────┤
-│  Total commands:    368                                                      │
-│  Input tokens:      324.1K                                                   │
-│  Output tokens:     23.1K                                                    │
-│  Tokens saved:      301.2K (93.0%)                                           │
-│  Total exec time:   9m22s (avg 1.5s)                                         │
-│                                                                              │
-│  Efficiency:        ██████████████████████░░ 93.0%                            │
+├ Summary ──────────────────────────────┬ Buddy ──────────────────────────────┤
+│  Total commands:    368               │                                      │
+│  Input tokens:      324.1K            │   .-----------.                      │
+│  Output tokens:     23.1K             │   | Keep it up! |                    │
+│  Tokens saved:      301.2K (93.0%)    │   `-----------'                      │
+│  Total exec time:   9m22s (avg 1.5s)  │         \                            │
+│                                       │        /)  /)                        │
+│  Efficiency:  ██████████████████ 93%  │      ( ·   · )                       │
+│                                       │      ((  ᵕ  ))                       │
+│                                       │     __| --- |__                      │
+├───────────────────────────────────────┴──────────────────────────────────────┤
 ├ Last 24 Hours — Tokens Saved (45.2K) ───────────────────────────────────────┤
-│  ░░░░░░░░░░░░░▂▃▅▇█▇▅▃▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▅▃▂▁▂▃▅▇█▆▅▃▁▂▃▅▆▇█  │
-│  ▂▃▅▇█▆▅▃▂▁▁▂▃▅▆▇█▇▅▃▂▁▂▃▅▇                                               │
+│  ▁▁▂▃▅▇█▇▅▃▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▅▃▂▁▂▃▅▇█▆▅▃▁▂▃▅▆▇█▇▅▃▂▃▅▇█▆▅  │
 │ -24h              -18h              -12h              -6h              now │
 ├ Last 30 Days — Tokens Saved ────────────────────────────────────────────────┤
 │  ░▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▆▅▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▆▅▂▃▅▇█▆▅  │
-│  ▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▆▅                                                  │
-│ 03/16          03/23          03/31          04/07          04/14          │
+│ 03/16          03/23          03/31          04/07          04/15          │
 ├ Recent Commands ────────────────────────────────────────────────────────────┤
-│  2026-04-14 18:42    rtk git status              1.2K  (82%)                │
-│  2026-04-14 18:41    rtk cargo test              4.5K  (90%)                │
-│  2026-04-14 18:40    rtk git log                 1.6K  (80%)                │
-│  2026-04-14 18:39    rtk cargo clippy            3.2K  (85%)                │
-│  2026-04-14 18:38    rtk git diff                2.1K  (76%)                │
+│  2026-04-15 18:42    rtk git status              1.2K  (82%)                │
+│  2026-04-15 18:41    rtk cargo test              4.5K  (90%)                │
+│  2026-04-15 18:40    rtk git log                 1.6K  (80%)                │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -82,7 +81,17 @@ cargo build --release
 rtk-tui                     # 自动检测 RTK 数据库
 rtk-tui --db /path/to.db    # 指定数据库路径
 rtk-tui --refresh 5         # 每 5 秒刷新（默认 1 秒）
+rtk-tui --buddy llama       # 选择你的 buddy 物种
 ```
+
+### Buddy 物种
+
+Dashboard 面板内置了一个 ASCII 电子宠物，会根据你的 token 节省数据做出反应。
+物种默认由数据库路径哈希决定，也可以通过 `--buddy` 手动选择：
+
+可选物种：`llama` · `cat` · `duck` · `blob` · `robot` · `penguin` · `ghost`
+
+Buddy 的心情由节省数据驱动：**Ecstatic**（24h 节省 50K+）→ **Happy**（效率 ≥80%）→ **Content**（≥50%）→ **Worried**（<50%）→ **Sleepy**（无活动）。
 
 ## ⌨️ 快捷键
 
@@ -128,7 +137,7 @@ rtk-tui --refresh 5         # 每 5 秒刷新（默认 1 秒）
 
 | # | 标签 | 说明 |
 |:-:|:-----|:-----|
-| 1 | **Dashboard** | Summary KPI · 效率仪表 · 24 小时 sparkline · 30 天 sparkline · 最近命令 |
+| 1 | **Dashboard** | Summary KPI · 效率仪表 · Buddy 伙伴 · 24 小时 sparkline · 30 天 sparkline · 最近命令 |
 | 2 | **History** | 按日 / 周 / 月的明细表格 — `d` `w` `m` 切换 |
 | 3 | **Commands** | 按节省 token 总量排名的命令列表 · 支持 `/` 搜索 |
 | 4 | **Projects** | 按项目维度的节省量统计 · 支持 `/` 搜索 |
@@ -136,6 +145,7 @@ rtk-tui --refresh 5         # 每 5 秒刷新（默认 1 秒）
 ## ✨ 特性
 
 - **实时仪表盘** — 每秒自动刷新，实时展示 token 节省量
+- **Buddy 伙伴** — ASCII 电子宠物，会行走、跳跃并根据节省数据变化心情（7 种物种、5 种心情）
 - **24 小时 & 30 天趋势图** — 逐小时和逐日 sparkline，带时间刻度
 - **效率仪表** — 彩色进度条，按阈值变色（绿 / 黄 / 红）
 - **搜索过滤** — 按 `/` 在 Commands 和 Projects 中按关键词过滤
@@ -197,9 +207,15 @@ src/
 ├── db.rs              只读 SQLite 查询 · prepare_cached · GLOB 转义
 ├── event.rs           输入线程 + 定时线程 → mpsc channel
 ├── export.rs          CSV 导出
+├── buddy/
+│   ├── mod.rs         BuddyState · 公共 API · 物种/心情/动画协调
+│   ├── species.rs     7 种物种 · ASCII 精灵帧（每种 3 帧 × 6 行）
+│   ├── mood.rs        5 种心情 · 眼睛字符 · 消息池（30 条消息）
+│   ├── animation.rs   行为状态机 · 时间控制 · PRNG · 气泡生命周期
+│   └── render.rs      精灵定位 · 气泡布局 · 心情配色
 └── ui/
     ├── mod.rs         标签栏 · 状态栏 · 帮助弹窗 · 空状态 · 格式化工具
-    ├── dashboard.rs   Summary KPI · 效率仪表 · sparklines · 最近命令
+    ├── dashboard.rs   Summary KPI · Buddy 面板 · 效率仪表 · sparklines
     ├── history.rs     日 / 周 / 月统计表格 · 滚动指示器
     ├── commands.rs    命令排行表格 · 搜索过滤
     └── projects.rs    项目维度统计表格 · 搜索过滤

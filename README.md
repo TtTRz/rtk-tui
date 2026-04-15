@@ -30,28 +30,27 @@
 ```
 ┌ RTK Token Savings ──────────────────────────────────────────────────────────┐
 │  1 Dashboard    2 History    3 Commands    4 Projects                        │
-├ Summary ────────────────────────────────────────────────────────────────────┤
-│  Total commands:    368                                                      │
-│  Input tokens:      324.1K                                                   │
-│  Output tokens:     23.1K                                                    │
-│  Tokens saved:      301.2K (93.0%)                                           │
-│  Total exec time:   9m22s (avg 1.5s)                                         │
-│                                                                              │
-│  Efficiency:        ██████████████████████░░ 93.0%                            │
+├ Summary ──────────────────────────────┬ Buddy ──────────────────────────────┤
+│  Total commands:    368               │                                      │
+│  Input tokens:      324.1K            │   .-----------.                      │
+│  Output tokens:     23.1K             │   | Keep it up! |                    │
+│  Tokens saved:      301.2K (93.0%)    │   `-----------'                      │
+│  Total exec time:   9m22s (avg 1.5s)  │         \                            │
+│                                       │        /)  /)                        │
+│  Efficiency:  ██████████████████ 93%  │      ( ·   · )                       │
+│                                       │      ((  ᵕ  ))                       │
+│                                       │     __| --- |__                      │
+├───────────────────────────────────────┴──────────────────────────────────────┤
 ├ Last 24 Hours — Tokens Saved (45.2K) ───────────────────────────────────────┤
-│  ░░░░░░░░░░░░░▂▃▅▇█▇▅▃▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▅▃▂▁▂▃▅▇█▆▅▃▁▂▃▅▆▇█  │
-│  ▂▃▅▇█▆▅▃▂▁▁▂▃▅▆▇█▇▅▃▂▁▂▃▅▇                                               │
+│  ▁▁▂▃▅▇█▇▅▃▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▅▃▂▁▂▃▅▇█▆▅▃▁▂▃▅▆▇█▇▅▃▂▃▅▇█▆▅  │
 │ -24h              -18h              -12h              -6h              now │
 ├ Last 30 Days — Tokens Saved ────────────────────────────────────────────────┤
 │  ░▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▆▅▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▆▅▂▃▅▇█▆▅  │
-│  ▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▆▅                                                  │
-│ 03/16          03/23          03/31          04/07          04/14          │
+│ 03/16          03/23          03/31          04/07          04/15          │
 ├ Recent Commands ────────────────────────────────────────────────────────────┤
-│  2026-04-14 18:42    rtk git status              1.2K  (82%)                │
-│  2026-04-14 18:41    rtk cargo test              4.5K  (90%)                │
-│  2026-04-14 18:40    rtk git log                 1.6K  (80%)                │
-│  2026-04-14 18:39    rtk cargo clippy            3.2K  (85%)                │
-│  2026-04-14 18:38    rtk git diff                2.1K  (76%)                │
+│  2026-04-15 18:42    rtk git status              1.2K  (82%)                │
+│  2026-04-15 18:41    rtk cargo test              4.5K  (90%)                │
+│  2026-04-15 18:40    rtk git log                 1.6K  (80%)                │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -82,7 +81,17 @@ cargo build --release
 rtk-tui                     # auto-detect RTK database
 rtk-tui --db /path/to.db    # specify database path
 rtk-tui --refresh 5         # refresh every 5s (default: 1s)
+rtk-tui --buddy llama       # choose your buddy species
 ```
+
+### Buddy Species
+
+The dashboard includes an ASCII companion that reacts to your token savings.
+Species is auto-assigned from your DB path hash, or pick one with `--buddy`:
+
+Available species: `llama` · `cat` · `duck` · `blob` · `robot` · `penguin` · `ghost`
+
+Buddy mood is driven by your savings data: **Ecstatic** (50K+ saved/24h) → **Happy** (≥80% efficiency) → **Content** (≥50%) → **Worried** (<50%) → **Sleepy** (no activity).
 
 ## ⌨️ Keyboard
 
@@ -128,7 +137,7 @@ rtk-tui --refresh 5         # refresh every 5s (default: 1s)
 
 | # | Tab | Description |
 |:-:|:----|:------------|
-| 1 | **Dashboard** | Summary KPIs · efficiency meter · 24h sparkline · 30-day sparkline · recent commands |
+| 1 | **Dashboard** | Summary KPIs · efficiency meter · buddy companion · 24h sparkline · 30-day sparkline · recent commands |
 | 2 | **History** | Daily / weekly / monthly table — toggle with `d` `w` `m` |
 | 3 | **Commands** | Top commands ranked by total tokens saved · searchable with `/` |
 | 4 | **Projects** | Per-project savings breakdown · searchable with `/` |
@@ -136,6 +145,7 @@ rtk-tui --refresh 5         # refresh every 5s (default: 1s)
 ## ✨ Features
 
 - **Live dashboard** — auto-refreshes every second, shows real-time token savings
+- **Buddy companion** — ASCII pet that walks, bounces, and reacts to your savings (7 species, 5 moods)
 - **24h & 30-day sparklines** — hourly and daily trends with time axis labels
 - **Efficiency meter** — visual progress bar with color-coded thresholds
 - **Search & filter** — press `/` to filter Commands and Projects by keyword
@@ -197,9 +207,15 @@ src/
 ├── db.rs              Read-only SQLite queries · prepare_cached · GLOB escape
 ├── event.rs           Input thread + tick thread → mpsc channel
 ├── export.rs          CSV export for all tabs
+├── buddy/
+│   ├── mod.rs         BuddyState · public API · species/mood/animation coordination
+│   ├── species.rs     7 species · ASCII sprite frames (3 frames × 6 lines each)
+│   ├── mood.rs        5 moods · eye chars · message pools (30 messages)
+│   ├── animation.rs   Action state machine · timing · PRNG · bubble lifecycle
+│   └── render.rs      Sprite positioning · speech bubble layout · mood coloring
 └── ui/
     ├── mod.rs         Tab bar · status bar · help popup · empty state · format helpers
-    ├── dashboard.rs   Summary KPIs · efficiency meter · sparklines · recent commands
+    ├── dashboard.rs   Summary KPIs · buddy panel · efficiency meter · sparklines
     ├── history.rs     Daily / weekly / monthly tables · scroll indicator
     ├── commands.rs    Top commands ranking · search filter
     └── projects.rs    Per-project breakdown · search filter

@@ -190,7 +190,7 @@ impl Db {
         if let Some(p) = project {
             let glob = format!("{}{}*", glob_escape(p), std::path::MAIN_SEPARATOR);
             let mut stmt = self.conn.prepare_cached(
-                "SELECT DATE(timestamp) as d, COUNT(*), SUM(input_tokens), SUM(output_tokens),
+                "SELECT DATE(timestamp, 'localtime') as d, COUNT(*), SUM(input_tokens), SUM(output_tokens),
                         SUM(saved_tokens)
                  FROM commands WHERE project_path = ?1 OR project_path GLOB ?2
                  GROUP BY d ORDER BY d DESC LIMIT 90",
@@ -199,7 +199,7 @@ impl Db {
             rows.map(|r| r.map_err(Into::into)).collect()
         } else {
             let mut stmt = self.conn.prepare_cached(
-                "SELECT DATE(timestamp) as d, COUNT(*), SUM(input_tokens), SUM(output_tokens),
+                "SELECT DATE(timestamp, 'localtime') as d, COUNT(*), SUM(input_tokens), SUM(output_tokens),
                         SUM(saved_tokens)
                  FROM commands GROUP BY d ORDER BY d DESC LIMIT 90",
             )?;
@@ -229,8 +229,8 @@ impl Db {
         if let Some(p) = project {
             let glob = format!("{}{}*", glob_escape(p), std::path::MAIN_SEPARATOR);
             let mut stmt = self.conn.prepare_cached(
-                "SELECT DATE(timestamp, 'weekday 0', '-6 days') as ws,
-                        DATE(timestamp, 'weekday 0') as we,
+                "SELECT DATE(timestamp, 'localtime', 'weekday 0', '-6 days') as ws,
+                        DATE(timestamp, 'localtime', 'weekday 0') as we,
                         COUNT(*), SUM(input_tokens), SUM(saved_tokens)
                  FROM commands WHERE project_path = ?1 OR project_path GLOB ?2
                  GROUP BY ws ORDER BY ws DESC LIMIT 52",
@@ -239,8 +239,8 @@ impl Db {
             rows.map(|r| r.map_err(Into::into)).collect()
         } else {
             let mut stmt = self.conn.prepare_cached(
-                "SELECT DATE(timestamp, 'weekday 0', '-6 days') as ws,
-                        DATE(timestamp, 'weekday 0') as we,
+                "SELECT DATE(timestamp, 'localtime', 'weekday 0', '-6 days') as ws,
+                        DATE(timestamp, 'localtime', 'weekday 0') as we,
                         COUNT(*), SUM(input_tokens), SUM(saved_tokens)
                  FROM commands GROUP BY ws ORDER BY ws DESC LIMIT 52",
             )?;
@@ -269,7 +269,7 @@ impl Db {
         if let Some(p) = project {
             let glob = format!("{}{}*", glob_escape(p), std::path::MAIN_SEPARATOR);
             let mut stmt = self.conn.prepare_cached(
-                "SELECT STRFTIME('%Y-%m', timestamp) as m, COUNT(*),
+                "SELECT STRFTIME('%Y-%m', timestamp, 'localtime') as m, COUNT(*),
                         SUM(input_tokens), SUM(saved_tokens)
                  FROM commands WHERE project_path = ?1 OR project_path GLOB ?2
                  GROUP BY m ORDER BY m DESC LIMIT 24",
@@ -278,7 +278,7 @@ impl Db {
             rows.map(|r| r.map_err(Into::into)).collect()
         } else {
             let mut stmt = self.conn.prepare_cached(
-                "SELECT STRFTIME('%Y-%m', timestamp) as m, COUNT(*),
+                "SELECT STRFTIME('%Y-%m', timestamp, 'localtime') as m, COUNT(*),
                         SUM(input_tokens), SUM(saved_tokens)
                  FROM commands GROUP BY m ORDER BY m DESC LIMIT 24",
             )?;
@@ -289,7 +289,7 @@ impl Db {
 
     pub fn get_recent(&self, limit: usize) -> Result<Vec<CommandRecord>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT timestamp, rtk_cmd, saved_tokens, savings_pct
+            "SELECT datetime(timestamp, 'localtime'), rtk_cmd, saved_tokens, savings_pct
              FROM commands ORDER BY timestamp DESC LIMIT ?1",
         )?;
         let rows = stmt.query_map(params![limit as i64], |row| {
@@ -346,7 +346,7 @@ impl Db {
     /// Get total tokens saved in the last 24 hours.
     pub fn get_saved_last_24h(&self) -> Result<i64> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT COALESCE(SUM(saved_tokens), 0) FROM commands WHERE timestamp >= datetime('now', '-24 hours')",
+            "SELECT COALESCE(SUM(saved_tokens), 0) FROM commands WHERE datetime(timestamp, 'localtime') >= datetime('now', 'localtime', '-24 hours')",
         )?;
         let saved: i64 = stmt.query_row([], |row| row.get(0))?;
         Ok(saved)
@@ -359,7 +359,7 @@ impl Db {
         let mut stmt = self.conn.prepare_cached(
             "SELECT STRFTIME('%Y-%m-%d %H', timestamp, 'localtime') as h, COALESCE(SUM(saved_tokens), 0)
              FROM commands
-             WHERE timestamp >= datetime('now', ?1)
+             WHERE datetime(timestamp, 'localtime') >= datetime('now', 'localtime', ?1)
              GROUP BY h ORDER BY h ASC",
         )?;
 
