@@ -50,8 +50,24 @@ pub enum HistoryView {
     Monthly,
 }
 
+impl HistoryView {
+    const ALL: [HistoryView; 3] = [
+        HistoryView::Daily,
+        HistoryView::Weekly,
+        HistoryView::Monthly,
+    ];
+
+    fn index(self) -> usize {
+        match self {
+            HistoryView::Daily => 0,
+            HistoryView::Weekly => 1,
+            HistoryView::Monthly => 2,
+        }
+    }
+}
+
 /// Cached data snapshot — refreshed only on DB change or tick.
-#[derive(Default)]
+#[derive(Default, PartialEq)]
 pub struct DataCache {
     pub summary: db::Summary,
     pub saved_last_24h: i64,
@@ -71,7 +87,8 @@ pub struct App {
     pub buddy: BuddyState,
     pub tab: Tab,
     pub history_view: HistoryView,
-    pub scroll_offset: usize,
+    tab_scroll_offsets: [usize; 4],
+    history_scroll_offsets: [usize; 3],
     pub last_error: Option<String>,
     pub should_quit: bool,
     pub show_help: bool,
@@ -80,8 +97,13 @@ pub struct App {
     pub export_msg: Option<String>,
     export_msg_ticks: u8,
     needs_redraw: bool,
-    refresh_interval_ticks: usize, // data refresh every N ticks
+    refresh_interval_ticks: usize,
     tick_count: usize,
+    last_terminal_width: u16,
+    chart_cache_width: usize,
+    stretched_sparkline_24h: Vec<u64>,
+    stretched_sparkline_30d: Vec<u64>,
+    chart_cache_dirty: bool,
 }
 
 impl App {
@@ -94,7 +116,8 @@ impl App {
             buddy: BuddyState::new(db_path, buddy_species),
             tab: Tab::Dashboard,
             history_view: HistoryView::Daily,
-            scroll_offset: 0,
+            tab_scroll_offsets: [0; 4],
+            history_scroll_offsets: [0; 3],
             last_error: None,
             should_quit: false,
             show_help: false,
@@ -105,6 +128,11 @@ impl App {
             needs_redraw: true,
             refresh_interval_ticks,
             tick_count: 0,
+            last_terminal_width: 0,
+            chart_cache_width: 0,
+            stretched_sparkline_24h: Vec::new(),
+            stretched_sparkline_30d: Vec::new(),
+            chart_cache_dirty: true,
         };
         app.refresh_cache();
         app
@@ -117,9 +145,10 @@ impl App {
 
         loop {
             if self.needs_redraw {
-                // Update buddy bounds before drawing
-                let term_width = terminal.size()?.width;
-                ui::dashboard::update_buddy_max_x(self, term_width);
+                let term_size = terminal.size()?;
+                self.last_terminal_width = term_size.width;
+                ui::dashboard::update_buddy_max_x(self, term_size.width);
+                self.prepare_chart_cache(term_size.width);
                 terminal.draw(|frame| ui::render(frame, self))?;
                 self.needs_redraw = false;
             }
@@ -135,6 +164,25 @@ impl App {
                 return Ok(());
             }
         }
+    }
+
+    pub fn scroll_offset(&self) -> usize {
+        match self.tab {
+            Tab::History => self.history_scroll_offsets[self.history_view.index()],
+            _ => self.tab_scroll_offsets[self.tab.index()],
+        }
+    }
+
+    pub fn chart_cache_width(&self) -> usize {
+        self.chart_cache_width
+    }
+
+    pub fn stretched_sparkline_24h(&self) -> &[u64] {
+        &self.stretched_sparkline_24h
+    }
+
+    pub fn stretched_sparkline_30d(&self) -> &[u64] {
+        &self.stretched_sparkline_30d
     }
 
     fn handle_key(&mut self, code: crossterm::event::KeyCode) {
@@ -155,14 +203,17 @@ impl App {
                     if code == KeyCode::Esc {
                         self.search_query.clear();
                     }
+                    self.clamp_current_scroll_offset();
                     self.needs_redraw = true;
                 }
                 KeyCode::Backspace => {
                     self.search_query.pop();
+                    self.clamp_current_scroll_offset();
                     self.needs_redraw = true;
                 }
                 KeyCode::Char(c) => {
                     self.search_query.push(c);
+                    self.clamp_current_scroll_offset();
                     self.needs_redraw = true;
                 }
                 _ => {}
@@ -179,45 +230,36 @@ impl App {
             KeyCode::Char('/') => {
                 self.search_mode = true;
                 self.search_query.clear();
+                self.clamp_current_scroll_offset();
                 self.needs_redraw = true;
             }
             KeyCode::Char('e') => {
                 self.handle_export();
                 self.needs_redraw = true;
             }
-            KeyCode::Tab => {
-                self.tab = self.tab.next();
-                self.scroll_offset = 0;
-                self.needs_redraw = true;
-            }
+            KeyCode::Tab => self.switch_tab(self.tab.next()),
             KeyCode::Char('1') => self.switch_tab(Tab::Dashboard),
             KeyCode::Char('2') => self.switch_tab(Tab::History),
             KeyCode::Char('3') => self.switch_tab(Tab::Commands),
             KeyCode::Char('4') => self.switch_tab(Tab::Projects),
             // History sub-view
             KeyCode::Char('d') if self.tab == Tab::History => {
-                self.history_view = HistoryView::Daily;
-                self.scroll_offset = 0;
-                self.needs_redraw = true;
+                self.switch_history_view(HistoryView::Daily)
             }
             KeyCode::Char('w') if self.tab == Tab::History => {
-                self.history_view = HistoryView::Weekly;
-                self.scroll_offset = 0;
-                self.needs_redraw = true;
+                self.switch_history_view(HistoryView::Weekly)
             }
             KeyCode::Char('m') if self.tab == Tab::History => {
-                self.history_view = HistoryView::Monthly;
-                self.scroll_offset = 0;
-                self.needs_redraw = true;
+                self.switch_history_view(HistoryView::Monthly)
             }
             // Scroll (clamped to data length)
             KeyCode::Down | KeyCode::Char('j') => {
                 let max = self.max_scroll();
-                self.scroll_offset = self.scroll_offset.saturating_add(1).min(max);
+                self.set_current_scroll_offset(self.scroll_offset().saturating_add(1).min(max));
                 self.needs_redraw = true;
             }
             KeyCode::Up | KeyCode::Char('k') => {
-                self.scroll_offset = self.scroll_offset.saturating_sub(1);
+                self.set_current_scroll_offset(self.scroll_offset().saturating_sub(1));
                 self.needs_redraw = true;
             }
             // Force refresh
@@ -232,7 +274,15 @@ impl App {
     fn switch_tab(&mut self, tab: Tab) {
         if self.tab != tab {
             self.tab = tab;
-            self.scroll_offset = 0;
+            self.clamp_current_scroll_offset();
+            self.needs_redraw = true;
+        }
+    }
+
+    fn switch_history_view(&mut self, view: HistoryView) {
+        if self.history_view != view {
+            self.history_view = view;
+            self.clamp_current_scroll_offset();
             self.needs_redraw = true;
         }
     }
@@ -240,38 +290,114 @@ impl App {
     fn on_tick(&mut self) {
         self.tick_count += 1;
 
-        // Refresh data from DB at the user-configured interval
+        let mut needs_redraw = false;
+
+        // Refresh data from DB at the user-configured interval.
         if self.tick_count.is_multiple_of(self.refresh_interval_ticks) {
-            self.refresh_cache();
+            needs_redraw |= self.refresh_cache();
         }
 
-        // Buddy animation runs every tick (500ms)
-        self.buddy.tick(&self.cache);
+        // Buddy animation runs every tick (500ms).
+        let buddy_changed = self.buddy.tick(&self.cache);
+        let buddy_visible = self.tab == Tab::Dashboard
+            && self.last_terminal_width >= ui::layout::BUDDY_MIN_WIDTH
+            && !self.show_help;
+        needs_redraw |= buddy_changed && buddy_visible;
 
-        // Decay export message (counts in data-refresh ticks)
+        // Decay export message (counts in data-refresh ticks).
         if self.tick_count.is_multiple_of(self.refresh_interval_ticks) && self.export_msg_ticks > 0
         {
             self.export_msg_ticks -= 1;
             if self.export_msg_ticks == 0 {
                 self.export_msg = None;
             }
+            needs_redraw = true;
         }
-        self.needs_redraw = true;
+
+        self.needs_redraw |= needs_redraw;
     }
 
     /// Maximum valid scroll offset for the current tab/view.
     fn max_scroll(&self) -> usize {
-        let len = match self.tab {
+        self.current_item_count().saturating_sub(1)
+    }
+
+    fn current_item_count(&self) -> usize {
+        match self.tab {
             Tab::Dashboard => 0,
             Tab::History => match self.history_view {
                 HistoryView::Daily => self.cache.daily.len(),
                 HistoryView::Weekly => self.cache.weekly.len(),
                 HistoryView::Monthly => self.cache.monthly.len(),
             },
-            Tab::Commands => self.cache.top_commands.len(),
-            Tab::Projects => self.cache.projects.len(),
-        };
-        len.saturating_sub(1)
+            Tab::Commands => self.filtered_commands_len(),
+            Tab::Projects => self.filtered_projects_len(),
+        }
+    }
+
+    fn filtered_commands_len(&self) -> usize {
+        let query = self.search_query.to_lowercase();
+        self.cache
+            .top_commands
+            .iter()
+            .filter(|c| query.is_empty() || c.command.to_lowercase().contains(&query))
+            .count()
+    }
+
+    fn filtered_projects_len(&self) -> usize {
+        let query = self.search_query.to_lowercase();
+        self.cache
+            .projects
+            .iter()
+            .filter(|p| query.is_empty() || p.project_path.to_lowercase().contains(&query))
+            .count()
+    }
+
+    fn set_current_scroll_offset(&mut self, offset: usize) {
+        match self.tab {
+            Tab::History => self.history_scroll_offsets[self.history_view.index()] = offset,
+            _ => self.tab_scroll_offsets[self.tab.index()] = offset,
+        }
+    }
+
+    fn clamp_current_scroll_offset(&mut self) {
+        self.set_current_scroll_offset(self.scroll_offset().min(self.max_scroll()));
+    }
+
+    fn clamp_all_scroll_offsets(&mut self) {
+        self.tab_scroll_offsets[Tab::Dashboard.index()] = 0;
+        self.tab_scroll_offsets[Tab::History.index()] = 0;
+        self.tab_scroll_offsets[Tab::Commands.index()] = self.tab_scroll_offsets
+            [Tab::Commands.index()]
+        .min(self.filtered_commands_len().saturating_sub(1));
+        self.tab_scroll_offsets[Tab::Projects.index()] = self.tab_scroll_offsets
+            [Tab::Projects.index()]
+        .min(self.filtered_projects_len().saturating_sub(1));
+
+        for view in HistoryView::ALL {
+            let idx = view.index();
+            let len = match view {
+                HistoryView::Daily => self.cache.daily.len(),
+                HistoryView::Weekly => self.cache.weekly.len(),
+                HistoryView::Monthly => self.cache.monthly.len(),
+            };
+            self.history_scroll_offsets[idx] =
+                self.history_scroll_offsets[idx].min(len.saturating_sub(1));
+        }
+    }
+
+    fn prepare_chart_cache(&mut self, area_width: u16) {
+        let target_width = area_width.saturating_sub(2) as usize;
+        if !self.chart_cache_dirty && self.chart_cache_width == target_width {
+            return;
+        }
+
+        self.stretched_sparkline_24h =
+            ui::dashboard::stretch_data(&self.cache.sparkline_24h, target_width);
+        self.stretched_sparkline_30d =
+            ui::dashboard::stretch_data(&self.cache.sparkline, target_width);
+        self.chart_cache_width = target_width;
+        self.chart_cache_dirty = false;
     }
 
     fn handle_export(&mut self) {
@@ -287,7 +413,8 @@ impl App {
     }
 
     /// Refresh all cached data from DB, tracking errors.
-    fn refresh_cache(&mut self) {
+    fn refresh_cache(&mut self) -> bool {
+        let previous_error = self.last_error.clone();
         self.last_error = None;
 
         macro_rules! fetch {
@@ -301,7 +428,7 @@ impl App {
             };
         }
 
-        self.cache = DataCache {
+        let new_cache = DataCache {
             summary: fetch!(self.db.get_summary(None)),
             saved_last_24h: fetch!(self.db.get_saved_last_24h()),
             sparkline_24h: fetch!(self.db.get_hourly_sparkline(24)),
@@ -313,5 +440,16 @@ impl App {
             top_commands: fetch!(self.db.get_top_commands(50)),
             projects: fetch!(self.db.get_projects()),
         };
+
+        let cache_changed = self.cache != new_cache;
+        let error_changed = self.last_error != previous_error;
+
+        self.cache = new_cache;
+        self.clamp_all_scroll_offsets();
+        if cache_changed {
+            self.chart_cache_dirty = true;
+        }
+
+        cache_changed || error_changed
     }
 }

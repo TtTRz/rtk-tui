@@ -28,6 +28,17 @@ fn fnv1a(s: &str) -> u32 {
     hash
 }
 
+#[derive(Clone, PartialEq, Eq)]
+pub struct BuddyRenderState {
+    mood: Mood,
+    bubble_text: Option<String>,
+    x_pos: usize,
+    facing_left: bool,
+    bounce_phase: bool,
+    frame_idx: usize,
+    blink: bool,
+}
+
 /// Complete buddy state, updated every tick.
 pub struct BuddyState {
     pub species: Species,
@@ -60,8 +71,23 @@ impl BuddyState {
         self.anim.max_x = panel_inner_width.saturating_sub(12);
     }
 
+    pub fn render_state(&self) -> BuddyRenderState {
+        let (frame_idx, blink) = self.anim.current_frame_info();
+        BuddyRenderState {
+            mood: self.mood,
+            bubble_text: self.bubble_text.clone(),
+            x_pos: self.x_pos,
+            facing_left: self.facing_left,
+            bounce_phase: self.bounce_phase,
+            frame_idx,
+            blink,
+        }
+    }
+
     /// Advance all state. Called every tick (500ms).
-    pub fn tick(&mut self, cache: &DataCache) {
+    pub fn tick(&mut self, cache: &DataCache) -> bool {
+        let before = self.render_state();
+
         self.mood = Mood::from_stats(cache);
         let movement = self.anim.tick(self.mood);
 
@@ -70,6 +96,8 @@ impl BuddyState {
         self.facing_left = movement.facing_left;
         self.bounce_phase = movement.bounce_phase;
         self.bubble_text = movement.bubble_text;
+
+        self.render_state() != before
     }
 
     /// Get current sprite frame lines with eyes substituted.

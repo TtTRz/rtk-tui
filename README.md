@@ -30,27 +30,23 @@
 ```
 ┌ RTK Token Savings ──────────────────────────────────────────────────────────┐
 │  1 Dashboard    2 History    3 Commands    4 Projects                        │
-├ Summary ──────────────────────────────┬ Buddy ──────────────────────────────┤
-│  Total commands:    368               │                                      │
-│  Input tokens:      324.1K            │   .-----------.                      │
-│  Output tokens:     23.1K             │   | Keep it up! |                    │
-│  Tokens saved:      301.2K (93.0%)    │   `-----------'                      │
-│  Total exec time:   9m22s (avg 1.5s)  │         \                            │
-│                                       │        /)  /)                        │
-│  Efficiency:  ██████████████████ 93%  │      ( ·   · )                       │
-│                                       │      ((  ᵕ  ))                       │
-│                                       │     __| --- |__                      │
-├───────────────────────────────────────┴──────────────────────────────────────┤
-├ Last 24 Hours — Tokens Saved (45.2K) ───────────────────────────────────────┤
-│  ▁▁▂▃▅▇█▇▅▃▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▅▃▂▁▂▃▅▇█▆▅▃▁▂▃▅▆▇█▇▅▃▂▃▅▇█▆▅  │
-│ -24h              -18h              -12h              -6h              now │
-├ Last 30 Days — Tokens Saved ────────────────────────────────────────────────┤
-│  ░▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▆▅▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▆▅▂▃▅▇█▆▅  │
-│ 03/16          03/23          03/31          04/07          04/15          │
+├ Overview ─────────────────────────────┬ Buddy ──────────────────────────────┤
+│  Saved:       5.7M                    │   .-----------.                      │
+│  Efficiency:  █████████████████ 93.0% │   | Keep it up! |                    │
+│  Trend:       ↑ +18% vs 7d avg (210K) │   `-----------'                      │
+├ Details ──────────────────────────────┤         \                            │
+│  Commands:    368                     │        /)  /)                        │
+│  Input:       324.1K                  │      ( ·   · )                       │
+│  Output:      23.1K                   │      ((  ᵕ  ))                       │
+│  Total time:  9m22s                   │     __| --- |__                      │
+│  Avg time:    1.5s                    │                                      │
+├ Last 24 Hours · 45.2K · Pk 4.1K ─────┬ Last 30 Days · Pk 301K ─────────────┤
+│ ▁▂▃▅▇█▇▅▃▂▁▂▃▅▇█▇▅▃▂▁▂▃▅▇█▆▅▃▂▁▂▃▅▇█ │ ░▂▃▅▇█▆▅▃▂▁▂▃▅▇█▇▅▃▂▁▁▂▃▅▆▇█▇▆▅▂▃▅█ │
+│ 12:00      16:00      20:00      now │ 03/19        03/26        now       │
 ├ Recent Commands ────────────────────────────────────────────────────────────┤
-│  2026-04-15 18:42    rtk git status              1.2K  (82%)                │
-│  2026-04-15 18:41    rtk cargo test              4.5K  (90%)                │
-│  2026-04-15 18:40    rtk git log                 1.6K  (80%)                │
+│  Command                               Saved    Exec   Time                  │
+│  rtk cargo clippy                      4.5K    3.5s  18:41                  │
+│  rtk git status                          800    1.2s  18:42                  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -137,7 +133,7 @@ Buddy mood is driven by your savings data: **Ecstatic** (50K+ saved/24h) → **H
 
 | # | Tab | Description |
 |:-:|:----|:------------|
-| 1 | **Dashboard** | Summary KPIs · efficiency meter · buddy companion · 24h sparkline · 30-day sparkline · recent commands |
+| 1 | **Dashboard** | Overview / Details cards · efficiency meter · buddy companion · side-by-side 24h & 30-day sparklines · recent commands |
 | 2 | **History** | Daily / weekly / monthly table — toggle with `d` `w` `m` |
 | 3 | **Commands** | Top commands ranked by total tokens saved · searchable with `/` |
 | 4 | **Projects** | Per-project savings breakdown · searchable with `/` |
@@ -146,7 +142,8 @@ Buddy mood is driven by your savings data: **Ecstatic** (50K+ saved/24h) → **H
 
 - **Live dashboard** — auto-refreshes every second, shows real-time token savings
 - **Buddy companion** — ASCII pet that walks, bounces, and reacts to your savings (7 species, 5 moods)
-- **24h & 30-day sparklines** — hourly and daily trends with time axis labels
+- **24h & 30-day sparklines** — hourly and daily trends with cleaner axis labels, rendered side by side on wide terminals
+- **Dashboard cards** — split Overview / Details cards for faster scanning of key metrics and secondary stats
 - **Efficiency meter** — visual progress bar with color-coded thresholds
 - **Search & filter** — press `/` to filter Commands and Projects by keyword
 - **CSV export** — press `e` to export current tab data to `/tmp/rtk-tui-*.csv`

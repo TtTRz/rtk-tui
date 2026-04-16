@@ -10,6 +10,7 @@ use ratatui::{
 
 use super::Mood;
 use crate::app::App;
+use crate::ui::theme;
 
 /// Render the buddy panel (sprite + speech bubble) into the given area.
 pub fn render_buddy(frame: &mut Frame, app: &App, area: Rect) {
@@ -31,19 +32,19 @@ pub fn render_buddy(frame: &mut Frame, app: &App, area: Rect) {
         let bubble_w = text.len() + 2;
         lines.push(Line::from(Span::styled(
             format!("{pad} .{}.", "-".repeat(bubble_w)),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme::MUTED_COLOR),
         )));
         lines.push(Line::from(Span::styled(
             format!("{pad} | {text} |"),
-            Style::default().fg(Color::White),
+            Style::default().fg(theme::TEXT_COLOR),
         )));
         lines.push(Line::from(Span::styled(
             format!("{pad} `{}'", "-".repeat(bubble_w)),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme::MUTED_COLOR),
         )));
         lines.push(Line::from(Span::styled(
-            format!("{pad}       \\"),
-            Style::default().fg(Color::DarkGray),
+            format!("{pad}       {}", "\\"),
+            Style::default().fg(theme::MUTED_COLOR),
         )));
     } else {
         for _ in 0..4 {
@@ -73,10 +74,10 @@ pub fn render_buddy(frame: &mut Frame, app: &App, area: Rect) {
 /// Map mood to display color.
 fn mood_color(mood: Mood) -> Color {
     match mood {
-        Mood::Ecstatic => Color::Yellow,
-        Mood::Happy => Color::Green,
-        Mood::Content => Color::Cyan,
-        Mood::Sleepy => Color::Blue,
-        Mood::Worried => Color::Red,
+        Mood::Ecstatic => theme::BUDDY_ECSTATIC_COLOR,
+        Mood::Happy => theme::BUDDY_HAPPY_COLOR,
+        Mood::Content => theme::BUDDY_CONTENT_COLOR,
+        Mood::Sleepy => theme::BUDDY_SLEEPY_COLOR,
+        Mood::Worried => theme::BUDDY_WORRIED_COLOR,
     }
 }

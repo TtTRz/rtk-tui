@@ -11,7 +11,7 @@ pub struct Db {
 // ── Data types ──
 // All token counts use i64 to safely represent DB values (including potential negatives).
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Summary {
     pub total_commands: i64,
     pub total_input: i64,
@@ -22,7 +22,7 @@ pub struct Summary {
     pub avg_time_ms: i64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct DayStats {
     pub date: String,
     pub commands: i64,
@@ -32,7 +32,7 @@ pub struct DayStats {
     pub savings_pct: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct WeekStats {
     pub week_start: String,
     pub week_end: String,
@@ -41,7 +41,7 @@ pub struct WeekStats {
     pub savings_pct: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct MonthStats {
     pub month: String,
     pub commands: i64,
@@ -49,15 +49,17 @@ pub struct MonthStats {
     pub savings_pct: f64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct CommandRecord {
     pub timestamp: String,
     pub rtk_cmd: String,
+    pub input_tokens: i64,
     pub saved_tokens: i64,
     pub savings_pct: f64,
+    pub exec_time_ms: i64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TopCommand {
     pub command: String,
     pub count: i64,
@@ -65,7 +67,7 @@ pub struct TopCommand {
     pub avg_savings_pct: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ProjectStats {
     pub project_path: String,
     pub commands: i64,
@@ -289,15 +291,17 @@ impl Db {
 
     pub fn get_recent(&self, limit: usize) -> Result<Vec<CommandRecord>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT datetime(timestamp, 'localtime'), rtk_cmd, saved_tokens, savings_pct
+            "SELECT datetime(timestamp, 'localtime'), rtk_cmd, input_tokens, saved_tokens, savings_pct, exec_time_ms
              FROM commands ORDER BY timestamp DESC LIMIT ?1",
         )?;
         let rows = stmt.query_map(params![limit as i64], |row| {
             Ok(CommandRecord {
                 timestamp: row.get(0)?,
                 rtk_cmd: row.get(1)?,
-                saved_tokens: row.get(2)?,
-                savings_pct: row.get(3)?,
+                input_tokens: row.get(2)?,
+                saved_tokens: row.get(3)?,
+                savings_pct: row.get(4)?,
+                exec_time_ms: row.get(5)?,
             })
         })?;
         rows.map(|r| r.map_err(Into::into)).collect()
@@ -469,6 +473,8 @@ mod tests {
         let recent = db.get_recent(2).unwrap();
         assert_eq!(recent.len(), 2);
         assert_eq!(recent[0].rtk_cmd, "rtk cargo test");
+        assert_eq!(recent[0].input_tokens, 5000);
+        assert_eq!(recent[0].exec_time_ms, 10);
     }
 
     #[test]

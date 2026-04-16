@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-04-16
+
+### Changed
+- Dashboard summary redesigned into two cards:
+  - **Overview** card for Saved / Efficiency / Trend
+  - **Details** card for Commands / Input / Output / Total time / Avg time
+- 24-hour and 30-day sparklines now render side by side when terminal width allows, with cleaner axis labels
+- Recent Commands redesigned as a lighter event table:
+  - Wide terminals show `Command / Saved / Exec / Time`
+  - Medium terminals show `Command / Saved / Exec`
+  - Narrow terminals show `Command / Saved`
+- Dashboard spacing, alignment, and information hierarchy were tightened for easier scanning in terminal layouts
+
+### Fixed
+- 24-hour sparkline axis now uses hour-aligned labels and keeps `now` as the rightmost marker
+- 30-day sparkline axis now follows a more regular weekly cadence
+- Summary and Recent Commands alignment improved to reduce visual noise
+
 ## [0.3.0] - 2026-04-15
 
 ### Added

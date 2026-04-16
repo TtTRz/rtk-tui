@@ -1,12 +1,15 @@
 pub mod commands;
 pub mod dashboard;
 pub mod history;
+pub mod layout;
 pub mod projects;
+pub mod table_utils;
+pub mod theme;
 
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Flex, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Tabs},
 };
@@ -20,11 +23,19 @@ pub fn sanitize(s: &str) -> String {
 }
 
 pub fn render(frame: &mut Frame, app: &App) {
-    let has_status = app.last_error.is_some() || app.export_msg.is_some() || app.search_mode;
+    let search_hint_visible = matches!(app.tab, Tab::Commands | Tab::Projects);
+    let has_status = app.last_error.is_some()
+        || app.export_msg.is_some()
+        || app.search_mode
+        || search_hint_visible;
     let chunks = Layout::vertical([
-        Constraint::Length(3),                              // tab bar
-        Constraint::Min(0),                                 // content
-        Constraint::Length(if has_status { 1 } else { 0 }), // status bar
+        Constraint::Length(layout::TAB_BAR_HEIGHT),
+        Constraint::Min(0),
+        Constraint::Length(if has_status {
+            layout::STATUS_BAR_HEIGHT
+        } else {
+            0
+        }),
     ])
     .split(frame.area());
 
@@ -42,27 +53,8 @@ pub fn render(frame: &mut Frame, app: &App) {
         }
     }
 
-    // Status bar (priority: error > search > export)
-    if let Some(err) = &app.last_error {
-        let msg = format!(" Error: {} ", err);
-        let paragraph = Paragraph::new(Line::from(Span::styled(
-            msg,
-            Style::default().fg(Color::White).bg(Color::Red),
-        )));
-        frame.render_widget(paragraph, chunks[2]);
-    } else if app.search_mode {
-        let msg = format!(" / {}█ ", app.search_query);
-        let paragraph = Paragraph::new(Line::from(Span::styled(
-            msg,
-            Style::default().fg(Color::White).bg(Color::Blue),
-        )));
-        frame.render_widget(paragraph, chunks[2]);
-    } else if let Some(msg) = &app.export_msg {
-        let paragraph = Paragraph::new(Line::from(Span::styled(
-            format!(" {msg} "),
-            Style::default().fg(Color::White).bg(Color::Green),
-        )));
-        frame.render_widget(paragraph, chunks[2]);
+    if has_status {
+        render_status_bar(frame, app, chunks[2], search_hint_visible);
     }
 
     // Help popup overlay (rendered last, on top of everything)
@@ -71,28 +63,104 @@ pub fn render(frame: &mut Frame, app: &App) {
     }
 }
 
+fn render_status_bar(frame: &mut Frame, app: &App, area: Rect, search_hint_visible: bool) {
+    let line = if let Some(err) = &app.last_error {
+        active_status_line("ERROR", err, theme::ERROR_COLOR, area.width as usize)
+    } else if app.search_mode {
+        active_status_line(
+            "SEARCH",
+            &format!("/ {}█", app.search_query),
+            theme::INFO_COLOR,
+            area.width as usize,
+        )
+    } else if let Some(msg) = &app.export_msg {
+        active_status_line("EXPORTED", msg, theme::SAVED_COLOR, area.width as usize)
+    } else if search_hint_visible {
+        passive_status_line(
+            if app.search_query.is_empty() {
+                "Tip · / search · ? help".to_string()
+            } else {
+                format!("Filter · {} · / edit", app.search_query)
+            },
+            area.width as usize,
+        )
+    } else {
+        passive_status_line(
+            "Tip · ? help · e export · r refresh".to_string(),
+            area.width as usize,
+        )
+    };
+
+    frame.render_widget(Paragraph::new(line), area);
+}
+
+fn active_status_line(
+    label: &str,
+    message: &str,
+    background: ratatui::style::Color,
+    width: usize,
+) -> Line<'static> {
+    let prefix = format!(" {label} ");
+    let available = width.saturating_sub(prefix.chars().count() + 1);
+    let message = truncate_inline(message, available);
+
+    Line::from(vec![
+        Span::styled(
+            prefix,
+            theme::status_style(background).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(format!(" {message}"), theme::status_style(background)),
+    ])
+}
+
+fn passive_status_line(message: String, width: usize) -> Line<'static> {
+    let prefix = " Tip ";
+    let available = width.saturating_sub(prefix.chars().count() + 1);
+    let message = truncate_inline(&message, available);
+
+    Line::from(vec![
+        Span::styled(prefix, theme::bold(theme::HEADER_COLOR)),
+        Span::styled(format!(" {message}"), theme::passive_status_style()),
+    ])
+}
+
+fn truncate_inline(text: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max_chars {
+        text.to_string()
+    } else if max_chars == 1 {
+        "…".to_string()
+    } else {
+        let mut truncated: String = chars[..max_chars - 1].iter().collect();
+        truncated.push('…');
+        truncated
+    }
+}
+
 fn render_empty_state(frame: &mut Frame, area: Rect) {
     let text = vec![
         Line::from(""),
         Line::from(Span::styled(
             "No RTK data found.",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
+            theme::bold(theme::HEADER_COLOR),
         )),
         Line::from(""),
         Line::from(Span::styled(
             "Run some commands with RTK to start tracking:",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme::MUTED_COLOR),
         )),
         Line::from(""),
         Line::from(Span::styled(
             "  cargo install rtk",
-            Style::default().fg(Color::Cyan),
+            Style::default().fg(theme::PERCENTAGE_COLOR),
         )),
         Line::from(Span::styled(
             "  rtk git status",
-            Style::default().fg(Color::Cyan),
+            Style::default().fg(theme::PERCENTAGE_COLOR),
         )),
     ];
     let paragraph = Paragraph::new(text)
@@ -105,55 +173,53 @@ fn render_help_popup(frame: &mut Frame) {
     let help_text = vec![
         Line::from(Span::styled(
             "Keyboard Shortcuts",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
+            theme::bold(theme::HEADER_COLOR),
         )),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  1 2 3 4  ", Style::default().fg(Color::Cyan)),
+            Span::styled("  1 2 3 4  ", Style::default().fg(theme::PERCENTAGE_COLOR)),
             Span::raw("Switch tabs"),
         ]),
         Line::from(vec![
-            Span::styled("  Tab      ", Style::default().fg(Color::Cyan)),
+            Span::styled("  Tab      ", Style::default().fg(theme::PERCENTAGE_COLOR)),
             Span::raw("Next tab"),
         ]),
         Line::from(vec![
-            Span::styled("  j / ↓    ", Style::default().fg(Color::Cyan)),
+            Span::styled("  j / ↓    ", Style::default().fg(theme::PERCENTAGE_COLOR)),
             Span::raw("Scroll down"),
         ]),
         Line::from(vec![
-            Span::styled("  k / ↑    ", Style::default().fg(Color::Cyan)),
+            Span::styled("  k / ↑    ", Style::default().fg(theme::PERCENTAGE_COLOR)),
             Span::raw("Scroll up"),
         ]),
         Line::from(vec![
-            Span::styled("  d w m    ", Style::default().fg(Color::Cyan)),
+            Span::styled("  d w m    ", Style::default().fg(theme::PERCENTAGE_COLOR)),
             Span::raw("Daily / Weekly / Monthly (History tab)"),
         ]),
         Line::from(vec![
-            Span::styled("  /        ", Style::default().fg(Color::Cyan)),
+            Span::styled("  /        ", Style::default().fg(theme::PERCENTAGE_COLOR)),
             Span::raw("Search (Commands / Projects)"),
         ]),
         Line::from(vec![
-            Span::styled("  e        ", Style::default().fg(Color::Cyan)),
+            Span::styled("  e        ", Style::default().fg(theme::PERCENTAGE_COLOR)),
             Span::raw("Export current tab as CSV"),
         ]),
         Line::from(vec![
-            Span::styled("  r        ", Style::default().fg(Color::Cyan)),
+            Span::styled("  r        ", Style::default().fg(theme::PERCENTAGE_COLOR)),
             Span::raw("Force refresh"),
         ]),
         Line::from(vec![
-            Span::styled("  q / Esc  ", Style::default().fg(Color::Cyan)),
+            Span::styled("  q / Esc  ", Style::default().fg(theme::PERCENTAGE_COLOR)),
             Span::raw("Quit"),
         ]),
         Line::from(""),
         Line::from(Span::styled(
             "Press any key to close",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme::MUTED_COLOR),
         )),
     ];
 
-    let popup_width = 48;
+    let popup_width = layout::HELP_POPUP_WIDTH;
     let popup_height = help_text.len() as u16 + 2; // +2 for border
     let area = frame.area();
     let popup_area = centered_rect(popup_width, popup_height, area);
@@ -163,7 +229,7 @@ fn render_help_popup(frame: &mut Frame) {
         Block::default()
             .borders(Borders::ALL)
             .title(" Help (?) ")
-            .border_style(Style::default().fg(Color::Yellow)),
+            .border_style(Style::default().fg(theme::HEADER_COLOR)),
     );
     frame.render_widget(paragraph, popup_area);
 }
@@ -185,7 +251,7 @@ fn render_tabs(frame: &mut Frame, app: &App, area: Rect) {
         .map(|(i, t)| {
             let num = format!(" {} ", i + 1);
             Line::from(vec![
-                Span::styled(num, Style::default().fg(Color::DarkGray)),
+                Span::styled(num, Style::default().fg(theme::MUTED_COLOR)),
                 Span::raw(t.title()),
             ])
         })
@@ -198,11 +264,7 @@ fn render_tabs(frame: &mut Frame, app: &App, area: Rect) {
                 .title(" RTK Token Savings "),
         )
         .select(app.tab.index())
-        .highlight_style(
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        );
+        .highlight_style(theme::tab_highlight_style());
 
     frame.render_widget(tabs, area);
 }
